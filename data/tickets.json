@@ -1,0 +1,28 @@
+{
+  "INC-B85113DD": {
+    "id": "INC-B85113DD",
+    "title": "prueba",
+    "description": "The frontend payment service encountered a critical validation error when attempting to process the user's card number string (\"55555-1234-5678-9012\"). This caused the transaction to fail, triggering an \"Invalid card number\" error. The incident affects the authentication module responsible for validating payment inputs. Based on the codebase evidence, this issue stems from an incorrect schema definition mismatch in the payment service. The recommended immediate action is to log this ticket for investigation, verify the schema definition for the payment service, and initiate a fix to resolve the card validation logic.",
+    "state": "backlog",
+    "severity": "P1",
+    "priority": 1,
+    "component": "authentication module",
+    "reporter_email": "flyingneuron@yandex.com",
+    "triage_meta": {
+      "severity": "P1",
+      "component": "authentication module",
+      "hypothesis": "The frontend payment processing logic failed due to a mismatch between the provided card number string ('55555-1234-5678-9012') and the expected schema definition in the codebase, likely due to a missing or incorrect schema validation in the payment service.",
+      "keywords": [
+        "payment",
+        "card",
+        "validation",
+        "error",
+        "schema"
+      ]
+    },
+    "created_at": "2026-04-08T03:15:30Z",
+    "updated_at": "2026-04-08T03:15:30Z",
+    "resolved_at": null,
+    "resolution_notes": null
+  }
+}

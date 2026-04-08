@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  sre-agent:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models          # mount your .gguf here
+      - ./data:/app/data              # chroma DB + cloned repo persist
+    env_file:
+      - .env
+    environment:
+      - REINDEX_ON_STARTUP=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
