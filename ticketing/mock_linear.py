@@ -108,13 +108,57 @@ def get_ticket(ticket_id: str) -> dict:
     return _store[ticket_id]
 
 
-def list_tickets(state: Optional[str] = None) -> List[dict]:
-    """Return all tickets, optionally filtered by state."""
+def list_tickets(
+    state: Optional[str] = None,
+    q: Optional[str] = None,
+    sort: str = "newest",
+    page: int = 1,
+    page_size: int = 10,
+) -> dict:
+    """
+    Return paginated tickets with optional state filter, keyword search, and sort.
+    Returns:
+        {
+            "tickets": [...],
+            "total": int,
+            "page": int,
+            "page_size": int,
+            "pages": int,
+        }
+    """
     tickets = list(_store.values())
+
+    # Filter by state
     if state:
         tickets = [t for t in tickets if t["state"] == state]
-    # Sort by priority then created_at
-    return sorted(tickets, key=lambda t: (t["priority"], t["created_at"]))
+
+    # Keyword search across title, description, component
+    if q:
+        q_lower = q.lower()
+        tickets = [
+            t for t in tickets
+            if q_lower in t.get("title", "").lower()
+            or q_lower in t.get("description", "").lower()
+            or q_lower in t.get("component", "").lower()
+            or q_lower in t.get("reporter_email", "").lower()
+        ]
+
+    # Sort by created_at
+    reverse = sort != "oldest"
+    tickets = sorted(tickets, key=lambda t: t.get("created_at", ""), reverse=reverse)
+
+    # Paginate
+    total = len(tickets)
+    pages = max(1, (total + page_size - 1) // page_size)
+    page  = max(1, min(page, pages))
+    start = (page - 1) * page_size
+    return {
+        "tickets":   tickets[start : start + page_size],
+        "total":     total,
+        "page":      page,
+        "page_size": page_size,
+        "pages":     pages,
+    }
 
 
 def update_ticket(ticket_id: str, **fields) -> dict:

@@ -69,5 +69,29 @@
     "updated_at": "2026-04-08T17:54:40Z",
     "resolved_at": null,
     "resolution_notes": null
+  },
+  "INC-3949A1F1": {
+    "id": "INC-3949A1F1",
+    "title": "test",
+    "description": "The test suite exposed a SQL injection vulnerability in `query-index.spec.ts` that allows unauthorized data extraction from the database. This incident has been flagged as a P1 severity issue requiring immediate investigation.",
+    "state": "done",
+    "severity": "P1",
+    "priority": 1,
+    "component": "database",
+    "reporter_email": "flyingneuron@yandex.com",
+    "triage_meta": {
+      "severity": "P1",
+      "component": "database",
+      "hypothesis": "SQL injection vulnerability in query-index.spec.ts allows unauthorized data extraction from the database.",
+      "keywords": [
+        "SQL",
+        "Injection",
+        "SQL Injection"
+      ]
+    },
+    "created_at": "2026-04-08T23:21:29Z",
+    "updated_at": "2026-04-08T23:23:10Z",
+    "resolved_at": "2026-04-08T23:23:10Z",
+    "resolution_notes": "We have successfully resolved the SQL injection vulnerability in query-index.spec.ts to prevent unauthorized data extraction, and we recommend tracking this P1 incident with immediate investigation to further protect the system."
   }
 }

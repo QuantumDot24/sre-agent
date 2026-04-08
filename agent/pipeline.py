@@ -27,7 +27,7 @@ from agent.notifier import (
 )
 from observability.logger import log_stage, metrics
 from observability.tracing import get_langfuse, setup_tracing
-from ticketing.mock_linear import create_ticket, resolve_ticket
+from ticketing.mock_linear import create_ticket, get_ticket, resolve_ticket
 
 logger = logging.getLogger(__name__)
 
@@ -306,9 +306,22 @@ def resolve_pipeline(ticket_id: str) -> dict:
         with _span("stage.resolve") as s_res:
             t0 = time.perf_counter()
             try:
-                ticket  = resolve_ticket(ticket_id)
+                # ── Generate LLM resolution notes before closing the ticket ──
+                raw_ticket = get_ticket(ticket_id)
+                try:
+                    notes = inference.run_resolution_notes(raw_ticket)
+                    logger.info(f"pipeline.resolution_notes_generated: chars={len(notes)}")
+                except Exception as note_err:
+                    logger.warning(f"pipeline.resolution_notes_failed: {note_err}")
+                    notes = "The issue has been addressed by the engineering team."
+
+                ticket = resolve_ticket(ticket_id, notes=notes)
                 elapsed = time.perf_counter() - t0
-                _upd(s_res, output={"ticket_id": ticket_id, "elapsed_ms": round(elapsed * 1000)})
+                _upd(s_res, output={
+                    "ticket_id": ticket_id,
+                    "notes_chars": len(notes),
+                    "elapsed_ms": round(elapsed * 1000),
+                })
                 log_stage("RESOLVE", "ticket_updated", run_id, ticket_id=ticket_id, elapsed=elapsed)
                 metrics.inc("stage.resolve.ok")
             except Exception as e:

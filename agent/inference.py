@@ -66,6 +66,20 @@ Triage result: {triage_json}
 Write the summary in plain text, no bullet points, no markdown headers.
 Summary:"""
 
+RESOLUTION_PROMPT = """\
+You are an SRE writing a resolution note for the original reporter of an incident.
+Based on the ticket information below, write a clear 2-3 sentence note that:
+- Confirms what was fixed or addressed
+- Mentions the root cause if it was identified
+- Includes a brief follow-up recommendation if applicable
+Write in plain English, friendly tone, no markdown, no bullet points.
+
+Ticket title: {title}
+Affected component: {component}
+Root cause hypothesis: {hypothesis}
+Original description: {description}
+
+Resolution note:"""
 
 # ---------------------------------------------------------------------------
 # Backend local con Qwen35ChatHandler
@@ -227,4 +241,20 @@ def run_summary(context: str, triage_json: str, image_bytes: Optional[bytes] = N
     result = re.sub(r"<think>.*?</think>", "", result, flags=re.DOTALL)
     result = re.sub(r"<\|im_end\|>", "", result)
     logger.info(f"inference.summary_done: chars_out={len(result)}")
+    return result
+
+def run_resolution_notes(ticket: dict) -> str:
+    """Generate a human-friendly resolution note for the reporter via LLM."""
+    _init_backend()
+    triage = ticket.get("triage_meta", {})
+    prompt = RESOLUTION_PROMPT.format(
+        title=ticket.get("title", ""),
+        component=triage.get("component", "unknown"),
+        hypothesis=triage.get("hypothesis", "Unable to determine"),
+        description=(ticket.get("description", ""))[:500],
+    )
+    result = _backend.generate(prompt)
+    result = re.sub(r"<think>.*?</think>", "", result, flags=re.DOTALL)
+    result = re.sub(r"<\|im_end\|>", "", result).strip()
+    logger.info(f"inference.resolution_done: chars_out={len(result)}")
     return result
