@@ -14,33 +14,27 @@ Endpoints:
 import json
 import logging
 import os
-import time
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
-
-from agent.pipeline import run_pipeline, resolve_pipeline
+from dotenv import load_dotenv
+load_dotenv()
+from observability.tracing import setup_tracing
+setup_tracing()
 from agent.guardrails import GuardrailError
+from agent.pipeline import run_pipeline, resolve_pipeline
+from observability.logger import metrics
 from ticketing.mock_linear import list_tickets, get_ticket
-from observability.logger import metrics, log_stage
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title="SRE Incident Intake & Triage Agent",
-    version="1.0.0",
-    description="Automated incident triage powered by Qwen LLM + RAG over Medusa codebase",
-)
+app = FastAPI(title="SRE Incident Intake & Triage Agent", version="1.0.0",
+    description="Automated incident triage powered by Qwen LLM + RAG over Medusa codebase", )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"], )
 
 NOTIFICATIONS_LOG = os.getenv("NOTIFICATIONS_LOG", "./data/notifications.jsonl")
 
@@ -56,13 +50,8 @@ async def ui():
 
 
 @app.post("/report")
-async def submit_report(
-    reporter_email: str = Form(...),
-    title:          str = Form(...),
-    description:    str = Form(...),
-    log_file:       Optional[UploadFile] = File(None),
-    screenshot:     Optional[UploadFile] = File(None),
-):
+async def submit_report(reporter_email: str = Form(...), title: str = Form(...), description: str = Form(...),
+        log_file: Optional[UploadFile] = File(None), screenshot: Optional[UploadFile] = File(None), ):
     """
     Ingest an incident report (multimodal: text + optional log file + screenshot).
     Runs the full 5-stage pipeline and returns the created ticket.
@@ -84,14 +73,8 @@ async def submit_report(
         logger.info("📸 API: no image uploaded")
 
     try:
-        result = run_pipeline(
-            reporter_email=reporter_email,
-            title=title,
-            description=description,
-            log_bytes=log_bytes,
-            image_bytes=image_bytes,
-            image_media_type=image_media_type,
-        )
+        result = run_pipeline(reporter_email=reporter_email, title=title, description=description, log_bytes=log_bytes,
+            image_bytes=image_bytes, image_media_type=image_media_type, )
         metrics.inc("api.report.ok")
         return JSONResponse(content=result, status_code=201)
 

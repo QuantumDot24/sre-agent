@@ -1,20 +1,66 @@
-version: "3.9"
-
 services:
+  langfuse-db:
+    image: postgres:15
+    container_name: langfuse-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  langfuse:
+    image: langfuse/langfuse:latest
+    container_name: langfuse
+    restart: unless-stopped
+    depends_on:
+      langfuse-db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      NEXTAUTH_SECRET: supersecret-local-only
+      NEXTAUTH_URL: http://localhost:3000
+      SALT: supersalt-local-only
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # --- TU APLICACIÓN (SRE AGENT) ---
   sre-agent:
     build: .
+    container_name: sre-agent
     ports:
       - "8000:8000"
     volumes:
-      - ./models:/app/models          # mount your .gguf here
-      - ./data:/app/data              # chroma DB + cloned repo persist
+      - ./models:/app/models
+      - ./data:/app/data
     env_file:
       - .env
     environment:
       - REINDEX_ON_STARTUP=true
+      # Para que tu App sepa dónde está Langfuse dentro de la red de Docker:
+      - LANGFUSE_HOST=http://langfuse:3000
+    depends_on:
+      langfuse:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+
+volumes:
+  langfuse_db_data:

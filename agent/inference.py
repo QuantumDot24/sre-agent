@@ -25,8 +25,12 @@ MAX_TOKENS = 1024
 # Prompt templates (en inglés, como pide el hackathon)
 # ---------------------------------------------------------------------------
 TRIAGE_PROMPT = """\
-You are an expert SRE performing automated incident triage. Analyze the incident below and the attached screenshot (if any). Respond **only with a valid JSON object**, no additional text, no markdown.
-
+You are an expert SRE performing automated incident triage.
+If a LOG EXCERPT is present between <log> tags, use it as the PRIMARY evidence for your analysis.
+Do NOT invent details not present in the incident report or log.
+The codebase context is SECONDARY — only use it if the log/description lack enough information.
+Analyze the incident below and the attached screenshot (if any).
+Respond **only with a valid JSON object**, no additional text, no markdown.
 The JSON must follow this schema:
 {{
   "severity": "P1" | "P2" | "P3" | "P4",
