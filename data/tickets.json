@@ -1,254 +1,72 @@
 {
-  "INC-B7D50F66": {
-    "id": "INC-B7D50F66",
-    "title": "Checkout failing for costumers.",
-    "description": "A failed checkout transaction was processed and resulted in a 400 Invalid Card Number response from the payment gateway, indicating a schema mismatch or invalid token format between the customer-provided number and the backend expectations. This occurs when the test suite mocks payment session creation but the actual API calls involve complex logic including multiple payment collections and flow steps, leading to a 16-digit Visa number mismatch in the provided transaction. The investigation indicates that the integration tests may have omitted the necessary flow steps and specific validation logic to ensure the generated card number satisfies the merchant's specific validation rules, causing the gateway to reject the request before the request even reaches the checkout endpoint.",
-    "state": "backlog",
-    "severity": "P2",
-    "priority": 2,
-    "component": "checkout flow",
-    "reporter_email": "flyingneuron@yandex.com",
-    "triage_meta": {
-      "severity": "P2",
-      "component": "checkout flow",
-      "hypothesis": "Payment gateway service is returning a 400 error (Invalid Card Number) because the API schema requires a 16-digit Visa number starting with 4, but the provided transaction (5555-1234-5678-9012) does not match this format, likely due to a malformed request body or a mismatch between the stored card number and the mock data in the tests.",
-      "keywords": [
-        "payment gateway",
-        "invalid_data",
-        "schema_mismatch"
-      ]
-    },
-    "created_at": "2026-04-08T14:13:29Z",
-    "updated_at": "2026-04-08T14:13:29Z",
-    "resolved_at": null,
-    "resolution_notes": null
-  },
-  "INC-A3EE080D": {
-    "id": "INC-A3EE080D",
-    "title": "Shopping failing.",
-    "description": "The payment endpoint `/store/carts/complete` is returning `400` status with `invalid_data` because the `payment_collection_id` field is missing or incorrect, leading to a transaction rejection.\n\nThis error is primarily affecting the `process_payment` module, specifically line 7 of `process_payment.py` in the `module` package, which is failing the card number validation based on the provided incident.\n\nThe likely cause is a data transmission issue where the payment collection identifier was not properly forwarded to the payment collection endpoint, resulting in an invalid request.\n\nThe recommended immediate action is to verify the `payment_collection_id` field in the request payload, ensure it matches the expected value based on the specific transaction context, and confirm the data integrity of the payment collection ID.",
-    "state": "backlog",
-    "severity": "P3",
-    "priority": 3,
-    "component": "payment-service",
-    "reporter_email": "flyingneuron@yandex.com",
-    "triage_meta": {
-      "severity": "P3",
-      "component": "payment-service",
-      "hypothesis": "The payment API endpoint `/store/carts/complete` is returning invalid data due to a missing or incorrect payment collection ID, causing the system to reject the transaction attempt.",
-      "keywords": [
-        "payment",
-        "collection",
-        "endpoint",
-        "invalid"
-      ],
-      "needs_escalation": false
-    },
-    "created_at": "2026-04-08T14:22:02Z",
-    "updated_at": "2026-04-08T14:22:02Z",
-    "resolved_at": null,
-    "resolution_notes": null
-  },
-  "INC-516D8ADE": {
-    "id": "INC-516D8ADE",
-    "title": "Shopping failing.",
-    "description": "The checkout flow is failing at the payment and sales channels stage, causing orders to fail. The root cause is likely a missing or corrupted response from the backend payment service. The affected users are those attempting to process purchases where the transaction fails. The immediate action should be to isolate the specific API call route failing at the payment and sales channels stage.",
+  "INC-CC0442B7": {
+    "id": "INC-CC0442B7",
+    "title": "fail on validation",
+    "description": "The frontend payment module failed to validate a submitted card number because the customer entered the Visa format (4 digits) but the backend likely treated the input as a floating-point number rather than a string, causing a `TypeError`. The affected service is the payment frontend component. Immediate action should involve ensuring the validation logic specifically accepts string inputs for card numbers and clarifying the expected input type in the validation rule definition to prevent similar float-to-string issues.",
     "state": "backlog",
     "severity": "P1",
     "priority": 1,
-    "component": "api",
-    "reporter_email": "neuroflying@gmail.com",
-    "triage_meta": {
-      "severity": "P1",
-      "component": "api",
-      "hypothesis": "The API endpoint for handling payment and sales transactions is consistently failing to process orders due to a missing or corrupted response from the backend payment service.",
-      "keywords": [
-        "payment",
-        "transactions",
-        "order",
-        "fail"
-      ],
-      "needs_escalation": true
-    },
-    "created_at": "2026-04-08T14:33:52Z",
-    "updated_at": "2026-04-08T14:33:52Z",
-    "resolved_at": null,
-    "resolution_notes": null
-  },
-  "INC-9F4C537E": {
-    "id": "INC-9F4C537E",
-    "title": "Shopping failing.",
-    "description": "A shopping payment page is failing because the 'shipping profile' component relies on semantic metadata like country of origin and product types that are absent from the `hu.json` translation file, causing it to fail validation despite low-impact cosmetic effects. The lack of required fields in the UI elements likely stems from a missing i18n file for product types.",
-    "state": "backlog",
-    "severity": "P4",
-    "priority": 4,
-    "component": "frontend",
-    "reporter_email": "ANGELCECYT09@GMAIL.COM",
-    "triage_meta": {
-      "severity": "P4",
-      "component": "frontend",
-      "hypothesis": "The UI elements in the dashboard are missing semantic metadata (e.g., SKU, shipping profile, country of origin, or specific product types) due to a missing i18n translation file (hu.json) for 'products', causing the 'shipping profile' and 'shipping profile' components to fail validation. This is a low-impact cosmetic issue that does not impact core functionality or revenue.",
-      "keywords": [
-        "shipping profile",
-        "product",
-        "missing i18n",
-        "frontend UI",
-        "cart"
-      ],
-      "needs_escalation": false
-    },
-    "created_at": "2026-04-08T14:36:49Z",
-    "updated_at": "2026-04-08T14:36:49Z",
-    "resolved_at": null,
-    "resolution_notes": null
-  },
-  "INC-6DAC8C75": {
-    "id": "INC-6DAC8C75",
-    "title": "prueba",
-    "description": "Automated triage failed. Manual review required.\n\nOriginal report:\nrefer to the image",
-    "state": "backlog",
-    "severity": "P3",
-    "priority": 3,
-    "component": "unknown",
-    "reporter_email": "flyingneuron@yandex.com",
-    "triage_meta": {
-      "severity": "P3",
-      "component": "unknown",
-      "hypothesis": "LLM triage failed",
-      "needs_escalation": false
-    },
-    "created_at": "2026-04-08T16:11:20Z",
-    "updated_at": "2026-04-08T16:11:20Z",
-    "resolved_at": null,
-    "resolution_notes": null
-  },
-  "INC-157F5629": {
-    "id": "INC-157F5629",
-    "title": "prueba",
-    "description": "The payment gateway failed to validate the provided credit card number due to a mismatch between the stored value (5555-1234-5678-9012) and the requested card number (4222-2222-2222-2222), resulting in a failed credit card authorization. This prevents the purchase from proceeding. The incident requires immediate escalation as the payment gateway validation logic is incorrect.",
-    "state": "backlog",
-    "severity": "P1",
-    "priority": 1,
-    "component": "database",
+    "component": "payment-frontend",
     "reporter_email": "flyingneuron@yandex.com",
     "triage_meta": {
       "severity": "P1",
-      "component": "database",
-      "hypothesis": "Payment gateway failed to validate the provided credit card number due to a mismatch with the payment service, preventing credit card authorization.",
-      "keywords": [
-        "Credit Card",
-        "Payment Gateway",
-        "Validation"
-      ],
-      "needs_escalation": true
-    },
-    "created_at": "2026-04-08T16:13:26Z",
-    "updated_at": "2026-04-08T16:13:26Z",
-    "resolved_at": null,
-    "resolution_notes": null
-  },
-  "INC-D7D52861": {
-    "id": "INC-D7D52861",
-    "title": "prueba",
-    "description": "The checkout process failed during the payment gateways due to an invalid card number format, specifically flagged as insufficient currency symbols and missing the DVC (Discount Verification Code) digit. This issue is directly attributed to the frontend translation files (ID, BS, CS, CN) which fail to render the currency symbol and DVC field in the UI, resulting in a payment gateway rejection of the transaction.",
-    "state": "backlog",
-    "severity": "P1",
-    "priority": 1,
-    "component": "checkout",
-    "reporter_email": "flyingneuron@yandex.com",
-    "triage_meta": {
-      "severity": "P1",
-      "component": "checkout",
-      "hypothesis": "Payment gateway rejected transaction due to invalid card number format, likely due to lack of currency symbol or missing DVC digit in provided card number string.",
-      "keywords": [
-        "payment",
-        "card",
-        "validation",
-        "fraudulent"
-      ]
-    },
-    "created_at": "2026-04-08T16:15:15Z",
-    "updated_at": "2026-04-08T16:15:15Z",
-    "resolved_at": null,
-    "resolution_notes": null
-  },
-  "INC-3D37C036": {
-    "id": "INC-3D37C036",
-    "title": "prueba",
-    "description": "An invalid payment card number caused the frontend's thumbnail generation to fail, resulting in a visual error. The user failed to complete their authentication, preventing the system from validating the card and displaying the error message correctly. This incident requires immediate investigation into the authentication flow and card number validation logic in the payment module.",
-    "state": "backlog",
-    "severity": "P1",
-    "priority": 1,
-    "component": "frontend",
-    "reporter_email": "flyingneuron@yandex.com",
-    "triage_meta": {
-      "severity": "P1",
-      "component": "frontend",
-      "hypothesis": "User authentication is failing due to an invalid card number input in the payment module.",
+      "component": "payment-frontend",
+      "hypothesis": "Payment gateway rejects submitted card due to invalid 12-digit value format, likely due to customer inputting 3 digits before the 4-digit Visa code or the value being treated as a float instead of a string.",
       "keywords": [
         "payment",
         "invalid",
-        "card-number"
+        "card",
+        "transaction"
       ]
     },
-    "created_at": "2026-04-08T16:17:21Z",
-    "updated_at": "2026-04-08T16:17:21Z",
+    "created_at": "2026-04-08T16:57:15Z",
+    "updated_at": "2026-04-08T16:57:15Z",
     "resolved_at": null,
     "resolution_notes": null
   },
-  "INC-9B1616E2": {
-    "id": "INC-9B1616E2",
-    "title": "prueba",
-    "description": "The e-commerce frontend product detail modal is causing a crash or breaking when the request exceeds hardcoded string limits. This is a P3 severity issue where the dynamic generation of HTML content triggers content validation failure. Immediate action required to adjust the code to dynamically handle the image and media count.",
+  "INC-9453FCFB": {
+    "id": "INC-9453FCFB",
+    "title": "refer to log file",
+    "description": "The API Gateway service for the checkout route `/shopping` failed to respond, resulting in a 502 Bad Gateway error that triggered the complete cart workflow, preventing payment processing.\n\nThe affected party is the payment and cart completion services on the myshop-app.com server instance.\n\nThe likely cause is a cascading failure where the upstream backend service (myshop-app.com) failed to respond to requests for `/shopping/cart` due to the 502 status code, causing the payment collection flow to halt.\n\nThe recommended immediate action is to investigate and verify the backend connectivity and status of the `Products-DB` service, as confirmed in the stack trace.",
+    "state": "backlog",
+    "severity": "P2",
+    "priority": 2,
+    "component": "API Gateway & Payment Gateway (Checkout Module)",
+    "reporter_email": "flyingneuron@yandex.com",
+    "triage_meta": {
+      "severity": "P2",
+      "component": "API Gateway & Payment Gateway (Checkout Module)",
+      "hypothesis": "The primary root cause is that the upstream backend service (myshop-app.com) failed to respond to requests, causing the 502 Bad Gateway on the HTTP route '/shopping/cart', which directly caused the cart completion workflow to fail. Since payment processing depends on this gateway, a total service failure results in a complete payment failure.",
+      "keywords": [
+        "502 Bad Gateway",
+        "payment",
+        "checkout",
+        "service unavailable"
+      ]
+    },
+    "created_at": "2026-04-08T17:41:43Z",
+    "updated_at": "2026-04-08T17:41:43Z",
+    "resolved_at": null,
+    "resolution_notes": null
+  },
+  "INC-630EC3C3": {
+    "id": "INC-630EC3C3",
+    "title": "se cierra mi app en la pantalla de compras",
+    "description": "The SRE team has identified that the checkout flow is failing due to memory exhaustion, specifically during the fulfillment step in the admin dashboard. Affected users are experiencing the error \"dice que la memoria es insuciente\" (memory is insufficient) on the \"compras\" (shopping) screen. The likely cause is a service-side memory quota issue within the `checkout/fulfillment` component that is preventing the system from processing the request. The recommended immediate action is to isolate the specific resource or increase the memory quota on the `checkout/fulfillment` service to resolve the bottleneck.",
     "state": "backlog",
     "severity": "P3",
     "priority": 3,
-    "component": "e-commerce frontend (product detail modal)",
+    "component": "checkout/fulfillment",
     "reporter_email": "flyingneuron@yandex.com",
     "triage_meta": {
       "severity": "P3",
-      "component": "e-commerce frontend (product detail modal)",
-      "hypothesis": "The product detail modal is dynamically generating HTML with hardcoded strings for product title, image URL, and media count, which causes the frontend to crash or break when the requested data (product details) exceeds the pre-defined string limits or content validation rules.",
-      "keywords": [
-        "e-commerce",
-        "frontend",
-        "validation",
-        "product title",
-        "media count",
-        "modal"
-      ],
+      "component": "checkout/fulfillment",
+      "hypothesis": "The system is experiencing a memory exhaustion or cache invalidation failure during the fulfillment processing step due to an insufficient memory quota in the admin dashboard service.",
+      "keywords": [],
       "needs_escalation": false
     },
-    "created_at": "2026-04-08T16:24:15Z",
-    "updated_at": "2026-04-08T16:24:15Z",
-    "resolved_at": null,
-    "resolution_notes": null
-  },
-  "INC-6D2B0045": {
-    "id": "INC-6D2B0045",
-    "title": "prueba",
-    "description": "The checkout/transaction logic failed because a 10-digit Visa card number starting with 5 was provided, which is invalid for Visa processing. This caused the frontend image upload interface to fail and prevent the image from being saved to the database, resulting in a browser error. This is a P4 severity incident affecting the frontend (image upload interface) component. The immediate recommendation is to retry the transaction with a valid Visa card number.",
-    "state": "backlog",
-    "severity": "P4",
-    "priority": 4,
-    "component": "frontend (image upload interface)",
-    "reporter_email": "flyingneuron@yandex.com",
-    "triage_meta": {
-      "severity": "P4",
-      "component": "frontend (image upload interface)",
-      "hypothesis": "The checkout/transaction logic failed due to a specific validation error related to '5555-1234-5678-9012' (10 digits), which is invalid for Visa card numbers, resulting in a browser error preventing the image from being uploaded to the database.",
-      "keywords": [
-        "payment",
-        "validation",
-        "invalid number",
-        "visa",
-        "card number",
-        "transaction"
-      ],
-      "needs_escalation": false
-    },
-    "created_at": "2026-04-08T16:32:05Z",
-    "updated_at": "2026-04-08T16:32:05Z",
+    "created_at": "2026-04-08T17:54:40Z",
+    "updated_at": "2026-04-08T17:54:40Z",
     "resolved_at": null,
     "resolution_notes": null
   }
