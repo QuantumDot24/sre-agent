@@ -44,6 +44,12 @@ LLM_GPU_LAYERS=35           # Increase if you have >6 GB VRAM, set 0 for CPU-onl
 OPENROUTER_API_KEY=sk-or-...
 OPENROUTER_MODEL=Qwen/Qwen3.5-0.8B
 
+# ── LANGFUSE TRACING  ─────────────────────────────────
+LANGFUSE_SECRET_KEY=!sk-lf..."
+LANGFUSE_PUBLIC_KEY="pk-lf..."
+LANGFUSE_BASE_URL="https://us.cloud.langfuse.com"
+
+
 # ── Email notifications (Gmail) ──────────────────────────────────────────────
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587

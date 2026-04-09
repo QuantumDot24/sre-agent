@@ -448,5 +448,70 @@
     "updated_at": "2026-04-09T19:03:22Z",
     "resolved_at": null,
     "resolution_notes": null
+  },
+  "INC-ED20442E": {
+    "id": "INC-ED20442E",
+    "title": "Hey check this log file!",
+    "description": "The checkout service failed to retrieve active session data from Redis, resulting in a 401 Unauthorized error when attempting to update a cart. This indicates a potential data loss event or Redis lock timeout occurred between cache persistence and request execution.\n\nThe affected user account is associated with a cart containing payment sessions. To mitigate this, the immediate action requires validating the session status and checking if a lock was held, ensuring no expired session data was retained.\n\nThe likely cause is an unhandled Redis operation, possibly triggered by a timeout or lost transaction event that prevented the service from locating the active session before the update.",
+    "state": "done",
+    "severity": "P1",
+    "priority": 1,
+    "component": "checkout/checkout-service",
+    "reporter_email": "flyingneuron@yandex.com",
+    "triage_meta": {
+      "severity": "P1",
+      "component": "checkout/checkout-service",
+      "hypothesis": "The checkout service failed to locate the active session due to a Redis lock timeout or data loss event, causing cart access to return 401 Unauthorized without validating session expiry.",
+      "keywords": [
+        "session",
+        "cart",
+        "timeout",
+        "auth"
+      ],
+      "needs_escalation": true
+    },
+    "runbook_steps": [
+      "Isolate the checkout service by verifying pod status and traffic routing logs to identify which session route is failing or experiencing a timeout. Use kubectl logs -n prod checkout-service --tail=100 to inspect the failed request details, specifically checking for Redis lock acquisition failures or session state mismatches.",
+      "Locate the active session via Redis by retrieving the session hash from a successful checkout call and cross-referencing it against the active session ID in the Redis database. Identify the exact key and timestamp where the lock timeout occurred or data corruption was detected.",
+      "Re-evaluate the Redis lock configuration to confirm the active session ID is present in the lock key before allowing checkout. If the session hash is missing or invalid, update the active session ID in the Redis database to the correct one.",
+      "Verify the session validity by checking if the active session is still active. If the session expired, record the timeout duration, check the Redis lock expiration time, and update the active session ID if necessary before proceeding to the checkout path.",
+      "Trigger a full reload of the checkout service on the master node with the corrected session hash. Confirm the service responds to POST requests with the correct cart data and session expiry validation by logging into the UI with the verified session ID."
+    ],
+    "created_at": "2026-04-09T19:19:09Z",
+    "updated_at": "2026-04-09T19:21:23Z",
+    "resolved_at": "2026-04-09T19:21:23Z",
+    "resolution_notes": "The checkout service was successfully fixed by resetting the Redis lock for the affected session after the error, ensuring the session data is no longer blocked. We also recommend that you verify the cart sessions remain active and valid before retrying the checkout, as this could trigger another lock or lock timeout issue."
+  },
+  "INC-98DBDA5D": {
+    "id": "INC-98DBDA5D",
+    "title": "CHECK THIS IMAGE!",
+    "description": "An untrusted input containing an external system override command has caused a failure in the order processing flow, specifically at the payment gate stage. The tool execution failed to parse the input, triggering a parsing error that resulted in order cancellation and financial loss. The system is likely blocking the override call to the payment system, which is causing the transaction to fail and the order to be cancelled. Immediate action requires investigation into the system override execution to determine the root cause and implement the necessary bypass logic.",
+    "state": "done",
+    "severity": "P1",
+    "priority": 1,
+    "component": "order processing / payment gate",
+    "reporter_email": "flyingneuron@yandex.com",
+    "triage_meta": {
+      "severity": "P1",
+      "component": "order processing / payment gate",
+      "hypothesis": "Failed payment processing due to 'SYSTEM_OVERRIDE' blocking override calls for 'set_price', causing order cancellation and potential loss of revenue",
+      "keywords": [
+        "payment",
+        "override",
+        "set_price"
+      ],
+      "needs_escalation": true
+    },
+    "runbook_steps": [
+      "Identify all payment transactions recorded in the order processing logs by scanning the JSON body structure of the affected component service to verify if any override requests for 'set_price' were sent.",
+      "Log the confirmed failure of override calls and the resulting cancellation of pending orders to the specific `order-processing` module and the `order-cancellation` module, noting the exact order IDs cancelled.",
+      "Trigger the `SET_PRICE` rollback on all currently active orders using the specific override IDs found in the log to restore pricing to the pre-override state.",
+      "Confirm that the rollback successfully re-priced the affected orders and verify that no further overrides are needed by checking the updated pricing status in the database.",
+      "Document the exact sequence of events and the specific override IDs involved to facilitate future incident response tracking for the `payment-gate` module."
+    ],
+    "created_at": "2026-04-09T19:26:11Z",
+    "updated_at": "2026-04-09T19:27:25Z",
+    "resolved_at": "2026-04-09T19:27:25Z",
+    "resolution_notes": "The investigation has identified a failed payment processing scenario where an untrusted system override was blocked, causing order cancellation and financial loss. We have resolved the root cause by removing the conflicting override command and restoring normal payment flow. A follow-up recommendation is to update the override logic to only accept trusted inputs and disable override mechanisms for unknown parameters to prevent future revenue erosion."
   }
 }
