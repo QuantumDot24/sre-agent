@@ -1,0 +1,35 @@
+# ── Web framework ────────────────────────────────────────────────────────────
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20        # FastAPI file uploads
+
+# ── HTTP client ───────────────────────────────────────────────────────────────
+httpx==0.28.1
+
+# ── Config ────────────────────────────────────────────────────────────────────
+python-dotenv==1.1.0
+
+# ── Structured logging ────────────────────────────────────────────────────────
+structlog==25.1.0
+
+# ── Tracing ───────────────────────────────────────────────────────────────────
+langfuse==3.0.3
+
+# ── RAG / vector store ────────────────────────────────────────────────────────
+chromadb==1.0.4
+sentence-transformers==4.1.0
+
+# ── Model download helper ─────────────────────────────────────────────────────
+huggingface-hub==0.30.2
+
+# ── LLM inference — JamePeng fork (REQUIRED — do NOT replace with official package)
+# Adds Qwen35ChatHandler + multimodal support absent in the official llama-cpp-python.
+#
+# Windows (CUDA 13.0) — install pre-built wheel manually:
+#   pip install https://github.com/JamePeng/llama-cpp-python/releases/download/v0.3.35-cu130-Basic-win-20260406/<wheel>.whl
+#
+# Docker / Linux — compiled from source inside the Dockerfile:
+#   CMAKE_ARGS="-DGGML_CUDA=on" pip install "llama-cpp-python @ git+https://github.com/JamePeng/llama-cpp-python.git"
+#
+# CPU-only fallback:
+#   pip install "llama-cpp-python @ git+https://github.com/JamePeng/llama-cpp-python.git"

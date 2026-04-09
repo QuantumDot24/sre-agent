@@ -4,9 +4,15 @@
 
 ### Prerequisites
 
-- [Docker Desktop](https://docs.docker.com/get-started/) installed and running
-- An [OpenRouter](https://openrouter.ai/) API key (free tier works)
+- [Docker Desktop](https://docs.docker.com/get-started/) with the **NVIDIA Container Toolkit** installed
+- A GPU with CUDA support (RTX 30xx / 40xx or equivalent)
+- *(Optional)* An [OpenRouter](https://openrouter.ai/) API key as cloud fallback
 - *(Optional)* A [Slack Incoming Webhook](https://api.slack.com/messaging/webhooks) URL for real Slack notifications
+
+> **Inference modes (auto-selected in order):**
+> 1. **Local** — Qwen3.5-0.8B GGUF loaded via the JamePeng llama-cpp-python fork (GPU)
+> 2. **OpenRouter** — cloud fallback if `OPENROUTER_API_KEY` is set and models are missing
+> 3. **Mock** — instant pre-canned responses, no model or API key required
 
 ---
 
@@ -25,32 +31,34 @@ cd sre-agent
 cp .env.example .env
 ```
 
-Open `.env` and fill in the required values:
+Open `.env` and fill in the values you need:
 
 ```env
-# Required — LLM inference via OpenRouter
+# ── Local inference (default, recommended) ──────────────────────────────────
+# Models are downloaded automatically on first run into ./models/
+# No API key required.
+LLM_CTX=8192
+LLM_GPU_LAYERS=35           # Increase if you have >6 GB VRAM, set 0 for CPU-only
+
+# ── Cloud fallback via OpenRouter (optional) ─────────────────────────────────
 OPENROUTER_API_KEY=sk-or-...
 OPENROUTER_MODEL=Qwen/Qwen3.5-0.8B
 
-# Optional — real Slack notifications
-# Get this from: api.slack.com → Your App → Incoming Webhooks
+# ── Email notifications (Gmail) ──────────────────────────────────────────────
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_FROM=your-account@gmail.com
+SMTP_PASSWORD=abcdefghijklmnop   # Gmail App Password (no spaces)
+TEAM_EMAIL=sre-team@yourdomain.com
+
+# ── Slack notifications (optional) ───────────────────────────────────────────
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/XXX/YYY/ZZZ
 TEAM_SLACK_CHANNEL=#incidents
 
-# Optional — real email notifications
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_FROM=sre-agent@yourdomain.com
-TEAM_EMAIL=sre-team@yourdomain.com
-
-# Already set with defaults — no change needed
-LLM_CTX=8192
-LLM_GPU_LAYERS=0
+# ── Storage paths (defaults work, no change needed) ──────────────────────────
 TICKETS_FILE=./data/tickets.json
 NOTIFICATIONS_LOG=./data/notifications.jsonl
 ```
-
-> **Note:** If `OPENROUTER_API_KEY` is not set, the agent falls back to a mock LLM that returns realistic pre-canned responses. The full pipeline (ticket creation, notifications, UI) still works in mock mode.
 
 ---
 
@@ -60,11 +68,24 @@ NOTIFICATIONS_LOG=./data/notifications.jsonl
 docker compose up --build
 ```
 
+**What happens on first launch:**
+
+| Step | Service | What it does |
+|------|---------|-------------|
+| 1 | `model-downloader` | Downloads `Qwen3.5-0.8B.Q4_K_M.gguf` and `mmproj-Qwen3.5-0.8B.f16.gguf` from HuggingFace into `./models/` (~600 MB total). Skipped on subsequent runs if files are already present. |
+| 2 | `sre-agent` | Builds the image, compiles the JamePeng llama-cpp-python fork with CUDA (~5-10 min, cached after first build), then starts the app. |
+
 Wait for this line before proceeding:
 
 ```
 api.startup: SRE Agent started. Index building in background.
 ```
+
+> **Already have the models?** Place them in `./models/` before running. The downloader will skip files that are already present.
+>
+> Expected filenames (rename if needed):
+> - `Qwen3.5-0.8B.Q4_K_M.gguf`
+> - `mmproj-Qwen3.5-0.8B.f16.gguf`
 
 ---
 
@@ -123,13 +144,22 @@ The LLM generates resolution notes and the reporter receives an email notificati
 
 ### Troubleshooting
 
-**Docker build fails on model download**  
-→ Models are not bundled. If using local inference, place `.gguf` files in `./models/`. For OpenRouter mode, no model files are needed.
+**Docker build fails compiling llama-cpp-python**
+→ The build requires `nvcc` (CUDA compiler). Make sure you're using the `nvidia/cuda:...-devel` base image (already set in the Dockerfile) and that the NVIDIA Container Toolkit is installed on your host.
 
-**Triage takes >30 seconds**  
-→ Check that `OPENROUTER_API_KEY` is set. Without it the system uses the mock backend which is instant.
+**`model-downloader` exits with a network error**
+→ HuggingFace may be throttling. Re-run with `docker compose up model-downloader`. Alternatively download the files manually and place them in `./models/`.
 
-**Slack messages not appearing**  
+**GPU not detected inside the container**
+→ Verify with `docker run --rm --gpus all nvidia/cuda:12.6.3-base-ubuntu22.04 nvidia-smi`. If that fails, reinstall the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html).
+
+**Triage takes >30 seconds on local mode**
+→ Check `LLM_GPU_LAYERS` in `.env`. Setting it to `0` forces CPU inference, which is much slower. Set it to `35` or higher to offload to GPU.
+
+**Gmail notifications failing with "Username and Password not accepted"**
+→ The `SMTP_PASSWORD` must be a Gmail **App Password** (not your regular password). Generate one at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords). Requires 2-Step Verification to be active on the account.
+
+**Slack messages not appearing**
 → Verify `SLACK_WEBHOOK_URL` is the full URL (`https://hooks.slack.com/services/...`). Test it with:
 ```bash
 curl -X POST -H 'Content-type: application/json' \
@@ -137,5 +167,5 @@ curl -X POST -H 'Content-type: application/json' \
   $SLACK_WEBHOOK_URL
 ```
 
-**Port 8000 already in use**  
-→ Change the port mapping in `docker-compose.yml`: `"8001:8000"` and open [http://localhost:8001](http://localhost:8001)
+**Port 8000 already in use**
+→ Change the port mapping in `docker-compose.yaml`: `"8001:8000"` and open [http://localhost:8001](http://localhost:8001)

@@ -46,13 +46,23 @@ def _send_email(to: str, subject: str, body: str) -> None:
     if SMTP_HOST:
         import smtplib
         from email.message import EmailMessage
+
+        smtp_password = os.getenv("SMTP_PASSWORD", "")   # ← nuevo
+
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"]    = os.getenv("SMTP_FROM", "sre-agent@example.com")
         msg["To"]      = to
         msg.set_content(body)
+
         with smtplib.SMTP(SMTP_HOST, int(os.getenv("SMTP_PORT", "587"))) as s:
+            s.ehlo()
+            s.starttls()                          # ← cifrado TLS
+            s.ehlo()
+            if smtp_password:                     # ← login solo si hay password
+                s.login(msg["From"], smtp_password)
             s.sendmail(msg["From"], [to], msg.as_string())
+
         record["status"] = "sent"
         logger.info(f"notifier.email_sent: to={to}, subject={subject}")
     else:

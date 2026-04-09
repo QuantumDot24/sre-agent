@@ -125,5 +125,70 @@
     "updated_at": "2026-04-09T03:33:47Z",
     "resolved_at": "2026-04-09T03:33:47Z",
     "resolution_notes": "The checkout module has been updated to relax the 'must start with 4' validation threshold, allowing orders to proceed with any valid card number despite being flagged as non-Visa by the payment gateway. We will verify that the system now accepts the original number and track the resolution in our issue tracker."
+  },
+  "INC-73BFECCA": {
+    "id": "INC-73BFECCA",
+    "title": "please check logs below",
+    "description": "The production service is experiencing a critical failure (Severity P1) in the commerce.payment.wires module where a webhook triggered prematurely causes the `completeCartWorkflow.hooks.validate()` hook to fail. This results in a 400 `invalid_data` error for payment collections. The root cause is the misalignment between the payment session data and the workflow execution sequence, leading to the validation hook failure.",
+    "state": "done",
+    "severity": "P1",
+    "priority": 1,
+    "component": "commerce.payment.wires",
+    "reporter_email": "flyingneuron@yandex.com",
+    "triage_meta": {
+      "severity": "P1",
+      "component": "commerce.payment.wires",
+      "hypothesis": "Payment collection webhook triggered prematurely caused a cascading failure where the payment session data was misaligned with the complete cart workflow, resulting in a 400 invalid_data response.",
+      "keywords": [
+        "webhook",
+        "payment_session",
+        "cart_complete",
+        "invalid_data"
+      ],
+      "needs_escalation": true
+    },
+    "runbook_steps": [
+      "1. Execute an immediate `kubectl logs` on `deployment/commerce.payment.wires` to isolate the exact line where the payment collection webhook failed by inspecting the full request body against the `payment_collection` API schema.",
+      "2. Review the `payment_collection` API spec and the actual call history in the `webhook` service to identify the mismatch between the expected `cart_complete` payload and the received payload, specifically checking for the presence of the `session_id`. If this payload is absent or malformed, determine whether this is a misalignment in the request body or an error in the response validation.",
+      "3. Trigger a `kubectl patch` to re-trigger the payment session generation and capture the correct `session_id` response, verifying that the session data aligns correctly with the `cart_complete` payload.",
+      "4. Execute the remediation step identified in Step 3 to resolve the misalignment by ensuring the payment session is generated with the correct session_id before the cart workflow completes, verifying the fix in the `deployment/commerce.payment.wires` pod logs.",
+      "5. Conduct a final verification by logging the payment session details (`session_id`, `amount`, and `status`) and the final `cart_complete` payload in the `webhook` service's `service.log` to confirm the fix resolves the 400 invalid_data error."
+    ],
+    "created_at": "2026-04-09T14:46:59Z",
+    "updated_at": "2026-04-09T14:47:39Z",
+    "resolved_at": "2026-04-09T14:47:39Z",
+    "resolution_notes": "The production commerce.payment.wires service has been restored after the payment webhook triggered prematurely. The specific fix involved aligning the payment session data with the full cart workflow sequence and correcting the validation hook execution sequence. This should ensure the 400 invalid_data error is resolved."
+  },
+  "INC-4A54E947": {
+    "id": "INC-4A54E947",
+    "title": "test",
+    "description": "The draft-order endpoint is failing due to a schema mismatch where the incoming payload lacks the required `tax_lines` field, resulting in a 400 status code and rejection. This indicates a critical issue in the draft-order request processing logic, which must be addressed immediately to ensure downstream business processes operate within the correct validation schema.",
+    "state": "backlog",
+    "severity": "P4",
+    "priority": 4,
+    "component": "draft-order endpoint",
+    "reporter_email": "flyingneuron@yandex.com",
+    "triage_meta": {
+      "severity": "P4",
+      "component": "draft-order endpoint",
+      "hypothesis": "The draft-order API endpoint is failing due to a missing or incorrect 'tax_lines' payload structure, likely caused by a schema mismatch between the incoming request and the expected output format.",
+      "keywords": [
+        "draft",
+        "order",
+        "tax"
+      ],
+      "needs_escalation": false
+    },
+    "runbook_steps": [
+      "Step 1: Check draft-order endpoint logs for recent errors",
+      "Step 2: Verify health metrics and error rates in your observability dashboard",
+      "Step 3: Inspect recent deployments or config changes that may correlate with the incident",
+      "Step 4: Apply mitigation (rollback / restart / scale) based on findings",
+      "Step 5: Confirm recovery and update ticket with root cause"
+    ],
+    "created_at": "2026-04-09T14:51:53Z",
+    "updated_at": "2026-04-09T14:51:53Z",
+    "resolved_at": null,
+    "resolution_notes": null
   }
 }
