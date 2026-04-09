@@ -30,7 +30,7 @@ Open `.env` and fill in the required values:
 ```env
 # Required — LLM inference via OpenRouter
 OPENROUTER_API_KEY=sk-or-...
-OPENROUTER_MODEL=qwen/qwen-2.5-7b-instruct
+OPENROUTER_MODEL=Qwen/Qwen3.5-0.8B
 
 # Optional — real Slack notifications
 # Get this from: api.slack.com → Your App → Incoming Webhooks

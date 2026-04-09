@@ -1,5 +1,5 @@
 """
-inference.py — LLM singleton con soporte multimodal (Qwen3.5 + mmproj)
+inference.py - inference logic
 """
 
 import base64
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 MODELS_DIR = os.getenv("MODELS_DIR", "./models")
 OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "qwen/qwen-2.5-7b-instruct")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "Qwen/Qwen3.5-0.8B")
 N_CTX = int(os.getenv("LLM_CTX", "8192"))
 N_GPU_LAYERS = int(os.getenv("LLM_GPU_LAYERS", "35"))
 MAX_TOKENS = 1024
@@ -216,8 +216,8 @@ def _init_backend():
     if _backend is not None:
         return
 
-    model_path = os.path.join(MODELS_DIR, "Qwen.Qwen3.5-0.8B.Q4_K_M.gguf")
-    mmproj_path = os.path.join(MODELS_DIR, "mmproj-Qwen.Qwen3.5-0.8B.f16.gguf")
+    model_path = os.path.join(MODELS_DIR, "Qwen3.5-0.8B.Q4_K_M.gguf")
+    mmproj_path = os.path.join(MODELS_DIR, "mmproj-Qwen3.5-0.8B.f16.gguf")
 
     if not os.path.exists(model_path):
         gguf_files = glob.glob(os.path.join(MODELS_DIR, "*.gguf"))

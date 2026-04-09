@@ -32,7 +32,7 @@ Scaling analysis: [`SCALING.md`](./SCALING.md)
 |-------|----------------------------------------------------|
 | API | FastAPI + Uvicorn                                  |
 | LLM (local) | Qwen3.5-0.8B-Q4_K_M via llama-cpp-python           |
-| LLM (cloud) | OpenRouter (qwen/qwen-2.5-7b-instruct)             |
+| LLM (cloud) | OpenRouter (Qwen/Qwen3.5-0.8B)             |
 | Multimodal | Qwen3.5ChatHandler + mmproj                        |
 | RAG | FAISS + sentence-transformers, indexed over Medusa |
 | Tracing | Langfuse                                           |
