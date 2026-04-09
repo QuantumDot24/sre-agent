@@ -4,6 +4,7 @@ api/main.py — FastAPI application.
 Endpoints:
   POST /report          — submit incident (text + optional image/log)
   POST /resolve/{id}    — mark ticket resolved, notify reporter
+  POST /tickets/{id}/invalidate — mark ticket as invalid (attack/spam)
   GET  /tickets         — list tickets (filter, search, paginate)
   GET  /tickets/{id}    — get single ticket
   GET  /metrics         — observability counters
@@ -26,13 +27,13 @@ setup_tracing()
 from agent.guardrails import GuardrailError
 from agent.pipeline import run_pipeline, resolve_pipeline
 from observability.logger import metrics
-from ticketing.mock_linear import list_tickets, get_ticket
+from ticketing.mock_linear import list_tickets, get_ticket, invalidate_ticket
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="SRE Incident Intake & Triage Agent",
-    version="0.8",
+    version="0.9",
     description="Automated incident triage powered by Qwen LLM + RAG over Medusa codebase",
 )
 
@@ -111,6 +112,21 @@ async def resolve(ticket_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/tickets/{ticket_id}/invalidate")
+async def invalidate(ticket_id: str, reason: str = "Marked as prompt injection attack"):
+    """Mark a ticket as invalid (spam/attack)."""
+    try:
+        ticket = invalidate_ticket(ticket_id, reason)
+        metrics.inc("api.invalidate.ok")
+        return JSONResponse(content=ticket)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Ticket {ticket_id} not found")
+    except Exception as e:
+        logger.exception("api.invalidate.error")
+        metrics.inc("api.invalidate.error")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/tickets")
 async def tickets_list(
     state: Optional[str] = None,
@@ -121,7 +137,7 @@ async def tickets_list(
 ):
     """
     List tickets with optional filters.
-    - state: 'backlog' | 'in_progress' | 'done'
+    - state: 'backlog' | 'in_progress' | 'done' | 'invalid'
     - q: keyword search (title, description, component, reporter)
     - sort: 'newest' (default) | 'oldest'
     - page / page_size: pagination
@@ -219,6 +235,7 @@ _HTML_UI = """<!DOCTYPE html>
 
   --success: #34d399;
   --danger:  #f87171;
+  --warning: #fbbf24;
 
   --radius:  10px;
   --radius-lg: 16px;
@@ -394,6 +411,7 @@ nav { padding: 16px 10px; flex: 1; display: flex; flex-direction: column; gap: 2
 .badge-P4 { color: var(--p4); border-color: rgba(52,211,153,.3);  background: rgba(52,211,153,.08);  }
 .badge-open     { color: var(--v400); border-color: rgba(167,139,250,.3); background: rgba(167,139,250,.08); }
 .badge-resolved { color: var(--p4);  border-color: rgba(52,211,153,.3);  background: rgba(52,211,153,.08);  }
+.badge-invalid  { color: var(--danger); border-color: rgba(248,113,113,.3); background: rgba(248,113,113,.08); }
 
 .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .section-title { font-size: 1rem; font-weight: 700; color: var(--text); }
@@ -408,6 +426,7 @@ nav { padding: 16px 10px; flex: 1; display: flex; flex-direction: column; gap: 2
 }
 .ticket-card:hover { border-color: var(--border-hi); background: var(--card-hover); transform: translateX(2px); }
 .ticket-card.expanded { border-color: rgba(139,92,246,.3); background: var(--card-hover); }
+.ticket-card.invalid { opacity: 0.7; border-color: rgba(248,113,113,.2); }
 .ticket-id { font-family: var(--mono); font-size: .72rem; color: #fafafa; padding-top: 3px; white-space: nowrap; }
 .ticket-main .ticket-title { font-weight: 600; font-size: .92rem; margin-bottom: 5px; color: var(--text); }
 .ticket-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -418,13 +437,22 @@ nav { padding: 16px 10px; flex: 1; display: flex; flex-direction: column; gap: 2
 .ticket-detail { display: none; grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 14px; margin-top: 4px; }
 .ticket-card.expanded .ticket-detail { display: block; }
 .ticket-description { font-size: .83rem; color: var(--text-2); line-height: 1.65; margin-bottom: 12px; }
-.ticket-actions { display: flex; gap: 8px; }
+.ticket-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .btn-sm { padding: 6px 14px; border-radius: 7px; font-size: .78rem; font-weight: 600; cursor: pointer; border: 1px solid; transition: all .15s; font-family: var(--font); }
 .btn-resolve { background: rgba(52,211,153,.08); border-color: rgba(52,211,153,.3); color: var(--p4); }
 .btn-resolve:hover { background: rgba(52,211,153,.15); }
 .btn-resolve:disabled { opacity: .5; cursor: not-allowed; }
 .btn-copy { background: var(--surface); border-color: var(--border); color: var(--text-2); }
 .btn-copy:hover { border-color: var(--border-hi); color: var(--text); }
+.btn-attack { background: rgba(248,113,113,.08); border-color: rgba(248,113,113,.3); color: var(--danger); }
+.btn-attack:hover { background: rgba(248,113,113,.2); border-color: var(--danger); }
+
+.security-alert-banner {
+  background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.3);
+  border-radius: var(--radius); padding: 10px 14px; margin-bottom: 14px;
+  font-size: .8rem; color: var(--danger);
+  display: flex; align-items: center; gap: 8px;
+}
 
 /* ── Tabs ── */
 .tabs { display: flex; gap: 0; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
@@ -511,7 +539,7 @@ nav { padding: 16px 10px; flex: 1; display: flex; flex-direction: column; gap: 2
       <div class="logo-icon">⚡</div>
       <span class="logo-name">SRE AGENT</span>
     </div>
-    <div class="logo-sub">v0.8 · QWEN 3.5 0.8B + RAG</div>
+    <div class="logo-sub">QWEN 3.5 0.8B + RAG</div>
   </div>
   <nav>
     <div class="nav-section">Workspace</div>
@@ -536,7 +564,7 @@ nav { padding: 16px 10px; flex: 1; display: flex; flex-direction: column; gap: 2
     </div>
   </nav>
   <div class="sidebar-footer">
-    <div class="status-dot"><div class="dot"></div><span>System online</span></div>
+    <div class="status-dot"><div class="dot"></div><span>System online v0.9</span></div>
   </div>
 </aside>
 
@@ -894,10 +922,25 @@ function renderTickets(data) {
       ? new Date(t.created_at).toLocaleString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})
       : '—';
     const desc = (t.description || '').substring(0, 220) + ((t.description || '').length > 220 ? '…' : '');
-    const stateLabel = t.state === 'done' ? 'resolved' : t.state === 'in_progress' ? 'in progress' : 'open';
-    const stateBadge = t.state === 'done' ? 'badge-resolved' : 'badge-open';
+    const stateLabel = t.state === 'done' ? 'resolved' : t.state === 'in_progress' ? 'in progress' : t.state === 'invalid' ? 'invalid' : 'open';
+    const stateBadge = t.state === 'done' ? 'badge-resolved' : t.state === 'invalid' ? 'badge-invalid' : 'badge-open';
+    const isInvalid = t.state === 'invalid';
+    const hasSecurityAlerts = t.security_alerts && t.security_alerts.length > 0;
+
+    // Build security alert banner if present
+    let securityBanner = '';
+    if (hasSecurityAlerts && !isInvalid) {
+      const alertsList = t.security_alerts.map(a => `• ${a}`).join('<br>');
+      securityBanner = `
+        <div class="security-alert-banner">
+          <span>⚠️</span>
+          <span><strong>Possible Prompt Injection</strong><br>${alertsList}</span>
+        </div>
+      `;
+    }
+
     return `
-    <div class="ticket-card" id="tc-${t.id}" onclick="toggleTicket('${t.id}')">
+    <div class="ticket-card ${isInvalid ? 'invalid' : ''}" id="tc-${t.id}" onclick="toggleTicket('${t.id}')">
       <div class="ticket-id">${t.id || '—'}</div>
       <div class="ticket-main">
         <div class="ticket-title">${t.title || 'Untitled'}</div>
@@ -908,6 +951,7 @@ function renderTickets(data) {
           ${t.reporter_email ? `<span class="ticket-reporter">by ${t.reporter_email}</span>` : ''}
         </div>
         <div class="ticket-detail">
+          ${securityBanner}
           <div class="ticket-description">${desc || 'No description.'}</div>
           ${t.runbook_steps && t.runbook_steps.length ? `
           <div style="background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.2);border-radius:8px;padding:10px 14px;margin-bottom:10px;">
@@ -921,8 +965,14 @@ function renderTickets(data) {
             <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;opacity:.7">Resolution</div>
             ${t.resolution_notes}
           </div>` : ''}
+          ${t.state === 'invalid' && t.invalid_reason ? `
+          <div style="background:rgba(248,113,113,.06);border:1px solid rgba(248,113,113,.2);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:.82rem;color:var(--danger)">
+            <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;opacity:.7">Invalidation Reason</div>
+            ${t.invalid_reason}
+          </div>` : ''}
           <div class="ticket-actions">
-            ${t.state !== 'done' ? `<button class="btn-sm btn-resolve" onclick="event.stopPropagation();resolveTicket('${t.id}')">✓ Mark Resolved</button>` : ''}
+            ${t.state !== 'done' && t.state !== 'invalid' ? `<button class="btn-sm btn-resolve" onclick="event.stopPropagation();resolveTicket('${t.id}')">✓ Mark Resolved</button>` : ''}
+            ${hasSecurityAlerts && t.state !== 'invalid' ? `<button class="btn-sm btn-attack" onclick="event.stopPropagation();markAsAttack('${t.id}')">🚨 Mark as Attack</button>` : ''}
             <button class="btn-sm btn-copy" onclick="event.stopPropagation();copyId('${t.id}')">⎘ Copy ID</button>
           </div>
         </div>
@@ -963,6 +1013,24 @@ async function resolveTicket(id) {
   } catch(e) {
     alert(`Failed to resolve: ${e.message}`);
     if (btn) { btn.disabled = false; btn.textContent = '✓ Mark Resolved'; }
+  }
+}
+
+async function markAsAttack(id) {
+  if (!confirm(`Mark ticket ${id} as a prompt injection attack?\\n\\nThis will invalidate the ticket and remove it from the active queue.`)) return;
+  const btn = document.querySelector(`#tc-${id} .btn-attack`);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Invalidating…'; }
+  try {
+    const resp = await fetch(`/tickets/${id}/invalidate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Marked as prompt injection attack' })
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    loadTickets();
+  } catch(e) {
+    alert(`Failed to invalidate: ${e.message}`);
+    if (btn) { btn.disabled = false; btn.textContent = '🚨 Mark as Attack'; }
   }
 }
 

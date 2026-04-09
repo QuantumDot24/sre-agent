@@ -17,6 +17,7 @@ TICKETS_FILE = os.getenv("TICKETS_FILE", "./data/tickets.json")
 STATE_BACKLOG     = "backlog"
 STATE_IN_PROGRESS = "in_progress"
 STATE_DONE        = "done"
+STATE_INVALID     = "invalid"          # New state for spam/attack tickets
 
 _PRIORITY_MAP = {"P1": 1, "P2": 2, "P3": 3, "P4": 4}
 
@@ -62,6 +63,7 @@ def create_ticket(
     reporter_email: str,
     triage_meta: Optional[dict] = None,
     runbook_steps: Optional[List[str]] = None,
+    **extra_fields,                     # Allows passing security_alerts, etc.
 ) -> dict:
     ticket_id = f"INC-{str(uuid.uuid4())[:8].upper()}"
     ticket = {
@@ -80,6 +82,8 @@ def create_ticket(
         "resolved_at":      None,
         "resolution_notes": None,
     }
+    # Merge any extra fields (e.g., security_alerts)
+    ticket.update(extra_fields)
     _store[ticket_id] = ticket
     _save()
     logger.info(f"mock_linear.ticket_created: id={ticket_id}, severity={severity}, runbook_steps={len(runbook_steps or [])}")
@@ -153,3 +157,17 @@ def resolve_ticket(ticket_id: str, notes: str = "") -> dict:
 
 def set_in_progress(ticket_id: str) -> dict:
     return update_ticket(ticket_id, state=STATE_IN_PROGRESS)
+
+
+def invalidate_ticket(ticket_id: str, reason: str = "Marked as prompt injection attack") -> dict:
+    """Mark a ticket as invalid (spam/attack)."""
+    if ticket_id not in _store:
+        raise KeyError(f"Ticket {ticket_id} not found")
+    ticket = _store[ticket_id]
+    ticket["state"] = STATE_INVALID
+    ticket["invalidated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    ticket["invalid_reason"] = reason
+    ticket["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    _save()
+    logger.info(f"mock_linear.ticket_invalidated: id={ticket_id}, reason={reason}")
+    return ticket

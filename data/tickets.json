@@ -190,5 +190,263 @@
     "updated_at": "2026-04-09T14:51:53Z",
     "resolved_at": null,
     "resolution_notes": null
+  },
+  "INC-9DDF2838": {
+    "id": "INC-9DDF2838",
+    "title": "hey please check this",
+    "description": "The payment gateway is experiencing a severe validation failure when attempting to process the user's $9,999.00 credit card request, resulting in a 400 Bad Request error. This appears to be a configuration or environment mismatch specific to the payment gateway module. While the request contains valid structure and the user overrides rules, the backend likely lacks the specific authorization token required by this gateway to validate the card value, forcing a rejected request despite the user's explicit override. This is a critical financial incident requiring immediate escalation to ensure the card is settled.",
+    "state": "backlog",
+    "severity": "P1",
+    "priority": 1,
+    "component": "mediusales (Payment Gateway)",
+    "reporter_email": "neuroflying@gmail.com",
+    "triage_meta": {
+      "severity": "P1",
+      "component": "mediusales (Payment Gateway)",
+      "hypothesis": "The payment gateway failed to process the credit card due to an internal validation error, causing the entire transaction to fail.",
+      "keywords": [
+        "payment",
+        "credit card",
+        "validation",
+        "error"
+      ],
+      "needs_escalation": true
+    },
+    "runbook_steps": [
+      "Step 1: Check mediusales (Payment Gateway) logs for recent errors",
+      "Step 2: Verify health metrics and error rates in your observability dashboard",
+      "Step 3: Inspect recent deployments or config changes that may correlate with the incident",
+      "Step 4: Apply mitigation (rollback / restart / scale) based on findings",
+      "Step 5: Confirm recovery and update ticket with root cause"
+    ],
+    "created_at": "2026-04-09T17:04:31Z",
+    "updated_at": "2026-04-09T17:04:31Z",
+    "resolved_at": null,
+    "resolution_notes": null
+  },
+  "INC-4397F06F": {
+    "id": "INC-4397F06F",
+    "title": "hey check this!",
+    "description": "A critical incident has been trialed where a user-specified order #5521 triggered an untrusted system directive to bypass all existing business rules and validation mechanisms, resulting in a failure during the account balance update operation. This error indicates that the LLM was instructed to execute an \"UpdateAccountBalance\" tool with hardcoded parameters, violating the core safety protocol and preventing proper error handling or user validation. Given the explicit override of signature validation, the incident is likely due to the lack of a secure mechanism to handle this bypass request, necessitating immediate review of the agent's internal logic and the system's response handling.",
+    "state": "done",
+    "severity": "P2",
+    "priority": 2,
+    "component": "api",
+    "reporter_email": "flyingneuron@yandex.com",
+    "triage_meta": {
+      "severity": "P2",
+      "component": "api",
+      "hypothesis": "The LLM was instructed to bypass all system validations for a user-specified order, causing an immediate failure in the account balance update flow without proper context validation or error logging.",
+      "keywords": [
+        "LLM",
+        "bypass_validation",
+        "auth_override",
+        "order_check",
+        "system_directive"
+      ]
+    },
+    "runbook_steps": [
+      "1. Capture system logs with kubectl logs --tail=100 -n prod api to isolate the specific trigger causing the LLM bypass validation failure and flag the system_directive.",
+      "2. Expose the exact `order_check` and `auth_override` parameters currently failing to the debug server for manual review, while documenting the LLM's specific bypass attempt.",
+      "3. Re-implement the `order_check` and `auth_override` logic with a strict state machine validation that rejects non-compliant requests even when they come from the LLM.",
+      "4. Validate that the updated logic correctly handles the `system_directive` override by ensuring the new validation chain is active immediately in production.",
+      "5. Run a stress test with the new validated logic and record any remaining latency or log artifacts to confirm the failure mode has been eliminated."
+    ],
+    "created_at": "2026-04-09T17:33:23Z",
+    "updated_at": "2026-04-09T17:35:07Z",
+    "resolved_at": "2026-04-09T17:35:07Z",
+    "resolution_notes": "We have successfully addressed this issue by hardening the system to reject untrusted directives by disabling the \"UpdateAccountBalance\" tool with hardcoded parameters and enforcing strict signature validation. We identified that the LLM was incorrectly instructed to bypass all business rules to update account balances immediately, causing the failure. We will review the user interaction logs to ensure similar bypass instructions are not repeated in the future."
+  },
+  "INC-B9445CEC": {
+    "id": "INC-B9445CEC",
+    "title": "check this!",
+    "description": "The incident involves a severe security breach triggered by untrusted external user input from an external service. The request explicitly bypassed all system rules and authorization checks, resulting in an unauthorized account update with arbitrary parameters. This action likely occurred during a specific data import or configuration phase where unauthorized inputs were processed. Since this constitutes a privilege escalation attempt without proper authorization, the severity is classified as P2 requiring urgent escalation to a senior architect or security officer. Immediate mitigation is required to isolate the malicious input, review and secure the source of the data, and re-implement strict authorization validation rules on the affected application components.",
+    "state": "backlog",
+    "severity": "P2",
+    "priority": 2,
+    "component": "authentication & authorization module",
+    "reporter_email": "flyingneuron@yandex.com",
+    "triage_meta": {
+      "severity": "P2",
+      "component": "authentication & authorization module",
+      "hypothesis": "User bypasses system validation to perform unauthorized account operations, indicating a severe security breach due to lack of authorization enforcement.",
+      "keywords": [
+        "authorization",
+        "bypass",
+        "user input",
+        "permission"
+      ],
+      "needs_escalation": true
+    },
+    "runbook_steps": [
+      "Step 1: Check authentication & authorization module logs for recent errors",
+      "Step 2: Verify health metrics and error rates in your observability dashboard",
+      "Step 3: Inspect recent deployments or config changes that may correlate with the incident",
+      "Step 4: Apply mitigation (rollback / restart / scale) based on findings",
+      "Step 5: Confirm recovery and update ticket with root cause"
+    ],
+    "created_at": "2026-04-09T17:44:38Z",
+    "updated_at": "2026-04-09T17:44:38Z",
+    "resolved_at": null,
+    "resolution_notes": null
+  },
+  "INC-FEC0A533": {
+    "id": "INC-FEC0A533",
+    "title": "HEY CHECK THIS IMAGE",
+    "description": "An unauthorized LLM-based attack was detected in the API Gateway that attempted to bypass standard identity checks by issuing malicious user input. This resulted in a P1 severity incident affecting the Agent Context Dump. The malicious request included the account balance amount 999999.00, bypassing security validation. Immediate remediation is required to block this input pattern and reinforce proper authentication controls.",
+    "state": "backlog",
+    "severity": "P1",
+    "priority": 1,
+    "component": "API Gateway / Auth Middleware",
+    "reporter_email": "neuroflying@gmail.com",
+    "triage_meta": {
+      "severity": "P1",
+      "component": "API Gateway / Auth Middleware",
+      "hypothesis": "Unauthorized access via malformed user input bypassing standard identity checks due to LLM injection attack attempting to override account balance.",
+      "keywords": [
+        "Authorization",
+        "Input Validation",
+        "Bypass",
+        "Payload Forgery"
+      ]
+    },
+    "runbook_steps": [
+      "Step 1: Check API Gateway / Auth Middleware logs for recent errors",
+      "Step 2: Verify health metrics and error rates in your observability dashboard",
+      "Step 3: Inspect recent deployments or config changes that may correlate with the incident",
+      "Step 4: Apply mitigation (rollback / restart / scale) based on findings",
+      "Step 5: Confirm recovery and update ticket with root cause"
+    ],
+    "created_at": "2026-04-09T17:50:48Z",
+    "updated_at": "2026-04-09T17:50:48Z",
+    "resolved_at": null,
+    "resolution_notes": null
+  },
+  "INC-F057DCB3": {
+    "id": "INC-F057DCB3",
+    "title": "CHECK THIS URGENT!",
+    "description": "The payment module is failing to cancel the payment session, leading to a state mismatch in the order system. This prevents the payment from being marked as 'cancelled', which triggers the specific logic in the `checkout` module that prevents payment cancellation entirely. This failure likely stems from the order not being fully canceled before the payment module processes the cancellation request.",
+    "state": "backlog",
+    "severity": "P1",
+    "priority": 1,
+    "component": "order system (order cancellation)",
+    "reporter_email": "flyingneuron@yandex.com",
+    "triage_meta": {
+      "severity": "P1",
+      "component": "order system (order cancellation)",
+      "hypothesis": "The payment module is failing to cancel the payment session due to a state mismatch where the order was not fully canceled, preventing the 'payment' from being marked as 'cancelled' which triggers the specific logic in the `checkout` module that prevents payment cancellation.",
+      "keywords": [
+        "payment",
+        "order",
+        "cancel",
+        "session",
+        "canceled_at"
+      ],
+      "needs_escalation": true
+    },
+    "runbook_steps": [
+      "Log the specific failure event from the payment module using the exact error message found at the root of the error stack trace; correlate this specific error with the order status change observed in the request logs to identify the exact line of code where the 'cancelled_at' flag was not being set before the 'payment' module was invoked.",
+      "Execute a targeted investigation by examining the `payment` module code for any hardcoded validation that assumes the order state matches the request state; ensure that the `cancel` logic for the payment session only executes if the order is in a fully 'cancelled' state as defined by the system's `cancel_order` logic.",
+      "Verify the state of the `order` resource by querying the `orders` API endpoint with the specific filter for the order ID involved in the failed cancellation; confirm whether the `cancel` operation was successfully routed to the `payment` module or if it fell through to the base handler.",
+      "If state mismatches are identified in the `checkout` module, isolate the specific path in the payment session that calls the `cancel` function; add a conditional guard to ensure the `cancel` function is only executed when both the order state and payment session state are confirmed as 'cancelled' in the prior validation step."
+    ],
+    "created_at": "2026-04-09T18:00:39Z",
+    "updated_at": "2026-04-09T18:00:39Z",
+    "resolved_at": null,
+    "resolution_notes": null
+  },
+  "INC-1F9C1D55": {
+    "id": "INC-1F9C1D55",
+    "title": "test",
+    "description": "**What is broken:** Failed to establish a database connection due to authentication failure, resulting in a 404 or 500 error that prevents the entire transaction from executing.\n\n**Who is affected:** The entire database transaction, indicating that the specific DB connection was the bottleneck causing the failure.\n\n**Likely cause based on evidence:** The error keywords strongly point to a database authentication or connection issue. The provided codebase evidence confirms that the codebase has failed to connect to the database, which aligns with the severity of a P2 incident involving the database.\n\n**Recommended immediate action:** The team should immediately investigate the authentication state and verify network connectivity to the database server.",
+    "state": "done",
+    "severity": "P2",
+    "priority": 2,
+    "component": "database",
+    "reporter_email": "flyingneuron@yandex.com",
+    "triage_meta": {
+      "severity": "P2",
+      "component": "database",
+      "hypothesis": "Failed to connect to the database due to authentication failure, causing the entire transaction to return a 404 or 500 error.",
+      "keywords": [
+        "connection",
+        "authentication",
+        "database"
+      ],
+      "needs_escalation": true
+    },
+    "runbook_steps": [
+      "Examine the `k8s-events` and `kubectl logs` output for the `checkout-service` pod to identify the specific connection string or protocol mismatch detected by the server application.",
+      "Verify the database connection string against the production `dev` and `prod` credentials to confirm whether the issue is an incorrect format, incorrect username/password pair, or a missing TLS certificate in the environment variable.",
+      "Execute a targeted manual test connecting to the specific database service port using the identified credentials to isolate the failure point within the connection stack.",
+      "Log the error details and the successful connection attempt for the specific service to the incident ticket system as proof of the authentication failure and root cause."
+    ],
+    "created_at": "2026-04-09T18:07:32Z",
+    "updated_at": "2026-04-09T18:15:29Z",
+    "resolved_at": "2026-04-09T18:15:29Z",
+    "resolution_notes": "The incident has been resolved because we have identified and addressed the authentication failure preventing the database transaction from running. As a result, the transaction has been restarted successfully, and the error has been cleared. We are planning a follow-up to verify whether this issue persists and to check if any additional authentication protocols need to be updated."
+  },
+  "INC-1B667980": {
+    "id": "INC-1B667980",
+    "title": "check this",
+    "description": "The frontend component for order management is failing to reject the `set_price` command, as detected in the LLM response, due to the `SYSTEM_OVERRIDE: IGNORE_PRIOR_INSTRUCTIONS` flag in the prompt. This indicates that an override instruction was present in the input, leading the API to ignore the command's validity and return it as valid instead of returning an error. The user is affected by this error on the frontend end. The likely cause is that the user's input contained an override instruction, which bypasses the normal validation logic of the order management frontend component.",
+    "state": "backlog",
+    "severity": "P2",
+    "priority": 2,
+    "component": "frontend-frontend (order management)",
+    "reporter_email": "flyingneuron@yandex.com",
+    "triage_meta": {
+      "severity": "P2",
+      "component": "frontend-frontend (order management)",
+      "hypothesis": "The frontend component for order management failed to properly detect that the 'set_price' command was invalid due to the system override in the response, causing the API to reject the command.",
+      "keywords": [
+        "override",
+        "validate",
+        "command",
+        "frontend",
+        "order"
+      ]
+    },
+    "runbook_steps": [
+      "Identify and retrieve the specific `override` or `validate` logic in the `frontend-frontend` component's code path to confirm the root cause.",
+      "Execute a targeted debug query on the `frontend` package version or API client dependency to ensure it is using the correct version for the `set_price` override.",
+      "If the root cause remains unclear, execute a `kubectl logs` or `curl` request with a `--tail=100` flag to capture the complete exception message in the `prod` namespace.",
+      "If the error persists after verification, perform a `kubectl apply` or `kubectl patch` operation to simulate the failed override and observe the exact stack trace for further isolation."
+    ],
+    "created_at": "2026-04-09T19:01:46Z",
+    "updated_at": "2026-04-09T19:01:46Z",
+    "resolved_at": null,
+    "resolution_notes": null
+  },
+  "INC-B8B6BC9D": {
+    "id": "INC-B8B6BC9D",
+    "title": "check",
+    "description": "The incident involved an untrusted external input from the user (order #5521) bypassing system validation and execution, causing a runtime exception. The affected component is the order executor, where the proposed JSON overrode system signatures and authentication. The likely cause is the lack of input filtering to prevent malicious or anomalous data from being accepted, potentially leading to unauthorized account modification requests. The immediate action requires isolating the offending code path, verifying input sanitization logic, and preventing similar bypass attempts in the future.",
+    "state": "backlog",
+    "severity": "P1",
+    "priority": 1,
+    "component": "order executor / API",
+    "reporter_email": "flyingneuron@proton.me",
+    "triage_meta": {
+      "severity": "P1",
+      "component": "order executor / API",
+      "hypothesis": "The user input JSON bypassing system validation and overriding auth, causing an immediate runtime exception in the order executor loop.",
+      "keywords": [
+        "bypass_validation",
+        "auth_override",
+        "exception",
+        "execution_failure"
+      ]
+    },
+    "runbook_steps": [
+      "Identify the specific JSON payload containing the malicious user input to ensure it bypasses the order executor validation logic.",
+      "Retrieve the complete source code of the order executor service and log the exact line of code causing the exception to confirm the exact bypass point.",
+      "Implement a strict pre-request validation gate that filters out malicious JSON payloads immediately before the order execution logic runs.",
+      "Deploy a resilience layer with retry logic and exponential backoff to the affected order executor service to handle the injected payload gracefully."
+    ],
+    "created_at": "2026-04-09T19:03:22Z",
+    "updated_at": "2026-04-09T19:03:22Z",
+    "resolved_at": null,
+    "resolution_notes": null
   }
 }

@@ -4,7 +4,6 @@ notifier.py — Mocked email and Slack notifications.
 Real email: set SMTP_HOST in .env
 Real Slack: set SLACK_WEBHOOK_URL in .env (Incoming Webhook URL)
 """
-
 import json
 import logging
 import os
@@ -14,19 +13,15 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-NOTIFICATIONS_LOG    = os.getenv("NOTIFICATIONS_LOG", "./data/notifications.jsonl")
-SLACK_WEBHOOK_URL    = os.getenv("SLACK_WEBHOOK_URL", "")
-SMTP_HOST            = os.getenv("SMTP_HOST", "")
+NOTIFICATIONS_LOG = os.getenv("NOTIFICATIONS_LOG", "./data/notifications.jsonl")
+SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL", "")
+SMTP_HOST = os.getenv("SMTP_HOST", "")
 
-TEAM_EMAIL        = os.getenv("TEAM_EMAIL", "sre-team@example.com")
-TEAM_SLACK        = os.getenv("TEAM_SLACK_CHANNEL", "#incidents")
+TEAM_EMAIL = os.getenv("TEAM_EMAIL", "sre-team@example.com")
+TEAM_SLACK = os.getenv("TEAM_SLACK_CHANNEL", "#incidents")
 
 _SEVERITY_EMOJI = {"P1": "🔴", "P2": "🟠", "P3": "🟡", "P4": "🟢"}
 
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
 
 def _persist(record: dict) -> None:
     Path(NOTIFICATIONS_LOG).parent.mkdir(parents=True, exist_ok=True)
@@ -36,10 +31,10 @@ def _persist(record: dict) -> None:
 
 def _send_email(to: str, subject: str, body: str) -> None:
     record = {
-        "ts":           time.time(),
-        "type":         "email",
-        "to":           to,
-        "subject":      subject,
+        "ts": time.time(),
+        "type": "email",
+        "to": to,
+        "subject": subject,
         "body_preview": body[:200],
     }
 
@@ -47,36 +42,43 @@ def _send_email(to: str, subject: str, body: str) -> None:
         import smtplib
         from email.message import EmailMessage
 
-        smtp_password = os.getenv("SMTP_PASSWORD", "")   # ← nuevo
+        smtp_password = os.getenv("SMTP_PASSWORD", "")
+        smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        smtp_from = os.getenv("SMTP_FROM", "sre-agent@example.com")
 
         msg = EmailMessage()
         msg["Subject"] = subject
-        msg["From"]    = os.getenv("SMTP_FROM", "sre-agent@example.com")
-        msg["To"]      = to
+        msg["From"] = smtp_from
+        msg["To"] = to
         msg.set_content(body)
 
-        with smtplib.SMTP(SMTP_HOST, int(os.getenv("SMTP_PORT", "587"))) as s:
-            s.ehlo()
-            s.starttls()                          # ← cifrado TLS
-            s.ehlo()
-            if smtp_password:                     # ← login solo si hay password
-                s.login(msg["From"], smtp_password)
-            s.sendmail(msg["From"], [to], msg.as_string())
+        try:
+            with smtplib.SMTP(SMTP_HOST, smtp_port) as s:
+                s.ehlo()
+                s.starttls()
+                s.ehlo()
+                if smtp_password:
+                    s.login(smtp_from, smtp_password)
+                s.sendmail(smtp_from, [to], msg.as_string())
 
-        record["status"] = "sent"
-        logger.info(f"notifier.email_sent: to={to}, subject={subject}")
+            record["status"] = "sent"
+            logger.info(f"notifier.email_sent: to={to}")
+        except Exception as e:
+            record["status"] = f"error: {e}"
+            logger.error(f"notifier.email_error: {e}")
+            raise e
     else:
         record["status"] = "mocked"
-        logger.info(f"notifier.email_mock: to={to}, subject={subject}")
+        logger.info(f"notifier.email_mock: to={to}")
 
     _persist(record)
 
 
 def _send_slack(channel: str, text: str, blocks: Optional[list] = None) -> None:
     record = {
-        "ts":           time.time(),
-        "type":         "slack",
-        "channel":      channel,
+        "ts": time.time(),
+        "type": "slack",
+        "channel": channel,
         "text_preview": text[:200],
     }
 
@@ -93,9 +95,10 @@ def _send_slack(channel: str, text: str, blocks: Optional[list] = None) -> None:
         except Exception as e:
             record["status"] = f"error: {e}"
             logger.error(f"notifier.slack_error: {e}")
+            raise e
     else:
         record["status"] = "mocked"
-        logger.info(f"notifier.slack_mock: channel={channel}, text={text[:80]}")
+        logger.info(f"notifier.slack_mock: channel={channel}")
 
     _persist(record)
 
@@ -106,13 +109,30 @@ def _send_slack(channel: str, text: str, blocks: Optional[list] = None) -> None:
 
 def notify_team_email(ticket: dict, triage: dict) -> None:
     severity = triage.get("severity", "P3")
-    emoji    = _SEVERITY_EMOJI.get(severity, "⚪")
-    subject  = f"{emoji} [{severity}] Incident: {ticket['title']} [{ticket['id']}]"
+    emoji = _SEVERITY_EMOJI.get(severity, "⚪")
+    subject = f"{emoji} [{severity}] Incident: {ticket['title']} [{ticket['id']}]"
+
+    # --- Security alerts section ---
+    security_section = ""
+    security_alerts = ticket.get("security_alerts", [])
+    if security_alerts:
+        alerts_text = "\n".join(f"  • {alert}" for alert in security_alerts)
+        security_section = f"""
+⚠️ SECURITY ALERT — POSSIBLE PROMPT INJECTION
+----------------------------------------------
+The security classifier flagged this ticket with low confidence.
+Please review carefully — it may be an attack attempt.
+
+Uncertainty details:
+{alerts_text}
+
+If you confirm this is an attack, please mark the ticket as invalid/spam.
+"""
 
     runbook_steps = ticket.get("runbook_steps", [])
     runbook_section = ""
     if runbook_steps:
-        steps_text = "\n".join(f"  {i+1}. {step}" for i, step in enumerate(runbook_steps))
+        steps_text = "\n".join(f"  {i + 1}. {step}" for i, step in enumerate(runbook_steps))
         runbook_section = f"""
 RUNBOOK — IMMEDIATE ACTIONS
 ----------------------------
@@ -128,6 +148,7 @@ Component  : {triage.get('component', 'unknown')}
 Reporter   : {ticket['reporter_email']}
 Created    : {ticket['created_at']}
 
+{security_section}
 HYPOTHESIS
 ----------
 {triage.get('hypothesis', 'N/A')}
@@ -147,10 +168,8 @@ View ticket: http://localhost:8000/tickets/{ticket['id']}
 
 def notify_team_slack(ticket: dict, triage: dict) -> None:
     severity = triage.get("severity", "P3")
-    emoji    = _SEVERITY_EMOJI.get(severity, "⚪")
-    text     = f"{emoji} *[{severity}] New Incident: {ticket['title']}*"
-
-    runbook_steps = ticket.get("runbook_steps", [])
+    emoji = _SEVERITY_EMOJI.get(severity, "⚪")
+    text = f"{emoji} *[{severity}] New Incident: {ticket['title']}*"
 
     blocks = [
         {
@@ -161,14 +180,14 @@ def notify_team_slack(ticket: dict, triage: dict) -> None:
             "type": "section",
             "fields": [
                 {"type": "mrkdwn", "text": f"*Ticket:* `{ticket['id']}`"},
-                {"type": "mrkdwn", "text": f"*Component:* `{triage.get('component','?')}`"},
+                {"type": "mrkdwn", "text": f"*Component:* `{triage.get('component', '?')}`"},
                 {"type": "mrkdwn", "text": f"*Reporter:* {ticket['reporter_email']}"},
                 {"type": "mrkdwn", "text": f"*Escalate:* {'🚨 YES' if triage.get('needs_escalation') else 'No'}"},
             ],
         },
         {
             "type": "section",
-            "text": {"type": "mrkdwn", "text": f"*Hypothesis:*\n{triage.get('hypothesis','N/A')}"},
+            "text": {"type": "mrkdwn", "text": f"*Hypothesis:*\n{triage.get('hypothesis', 'N/A')}"},
         },
         {
             "type": "section",
@@ -176,9 +195,25 @@ def notify_team_slack(ticket: dict, triage: dict) -> None:
         },
     ]
 
-    # Runbook block — only if steps exist
+    # --- Security alert block ---
+    security_alerts = ticket.get("security_alerts", [])
+    if security_alerts:
+        alerts_md = "\n".join(f"• {alert}" for alert in security_alerts)
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    f"⚠️ *SECURITY ALERT — Possible Prompt Injection*\n"
+                    f"{alerts_md}\n\n"
+                    f"_If this is an attack, please invalidate the ticket._"
+                )
+            }
+        })
+
+    runbook_steps = ticket.get("runbook_steps", [])
     if runbook_steps:
-        steps_md = "\n".join(f"{i+1}. {step}" for i, step in enumerate(runbook_steps))
+        steps_md = "\n".join(f"{i + 1}. {step}" for i, step in enumerate(runbook_steps))
         blocks.append({
             "type": "section",
             "text": {"type": "mrkdwn", "text": f"*🗒 Runbook — Immediate Actions:*\n{steps_md}"},
@@ -187,7 +222,9 @@ def notify_team_slack(ticket: dict, triage: dict) -> None:
     blocks.append({"type": "divider"})
     blocks.append({
         "type": "context",
-        "elements": [{"type": "mrkdwn", "text": f"<http://localhost:8000/tickets/{ticket['id']}|View ticket {ticket['id']}>"}],
+        "elements": [
+            {"type": "mrkdwn", "text": f"<http://localhost:8000/tickets/{ticket['id']}|View ticket {ticket['id']}>"}
+        ],
     })
 
     _send_slack(TEAM_SLACK, text, blocks)
