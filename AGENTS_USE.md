@@ -8,7 +8,7 @@
 
 **Agent Name:** SRE Triage Agent  
 **Purpose:** Automates the full incident lifecycle for an e-commerce platform built on Medusa. When an engineer or end-user submits an incident report (text, screenshot, log file), the agent performs automated triage using a multimodal LLM, creates a structured ticket, notifies the on-call team via email and Slack with a generated runbook, and — when the ticket is resolved — generates personalized resolution notes and notifies the original reporter. The system eliminates the manual triage bottleneck that typically costs 15–30 minutes per incident during high-severity events.  
-**Tech Stack:** Python 3.11, FastAPI, llama-cpp-python (local) / OpenRouter (cloud fallback), Qwen2.5-7B-Instruct (multimodal), FAISS + sentence-transformers (RAG), Langfuse (tracing), smtplib / Slack Incoming Webhooks (notifications), Docker Compose.
+**Tech Stack:** Python 3.11, FastAPI, llama-cpp-python (local) / OpenRouter (cloud fallback), Qwen3.5 0.8B Q4_K_M, FAISS + sentence-transformers (RAG), Langfuse (tracing), smtplib / Slack Incoming Webhooks (notifications), Docker Compose.
 
 ---
 
@@ -16,14 +16,14 @@
 
 ### Agent: SRE Triage Agent
 
-| Field | Description |
-|-------|-------------|
-| **Role** | Ingests multimodal incident reports, performs LLM-powered triage, creates tickets, dispatches notifications, and closes the loop with reporters on resolution |
-| **Type** | Semi-autonomous (human triggers report and resolution; agent handles all intermediate steps automatically) |
-| **LLM** | Qwen2.5-7B-Instruct via llama-cpp-python (local) → OpenRouter (cloud fallback) → Mock (offline fallback) |
-| **Inputs** | Incident title (text), description (text), reporter email, optional log file (.log/.txt/.json/.jsonl), optional screenshot (JPEG/PNG/WebP) |
+| Field | Description                                                                                                                                                                                          |
+|-------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Role** | Ingests multimodal incident reports, performs LLM-powered triage, creates tickets, dispatches notifications, and closes the loop with reporters on resolution                                        |
+| **Type** | Semi-autonomous (human triggers report and resolution; agent handles all intermediate steps automatically)                                                                                           |
+| **LLM** | Qwen3.5 0.8B Q4_K_M via llama-cpp-python (local) → OpenRouter (cloud fallback) → Mock (offline fallback)                                                                                             |
+| **Inputs** | Incident title (text), description (text), reporter email, optional log file (.log/.txt/.json/.jsonl), optional screenshot (JPEG/PNG/WebP)                                                           |
 | **Outputs** | Triage JSON (severity P1–P4, component, hypothesis, keywords, escalation flag), technical summary, runbook steps (3–5 actionable items), ticket record, email + Slack notifications, resolution note |
-| **Tools** | RAG query over Medusa codebase (FAISS), mock Linear ticket store (JSON persistence), SMTP email, Slack Incoming Webhook, Langfuse tracing spans |
+| **Tools** | RAG query over Medusa codebase (FAISS), mock Linear ticket store (JSON persistence), SMTP email, Slack Incoming Webhook, Langfuse tracing spans                                                      |
 
 ---
 
