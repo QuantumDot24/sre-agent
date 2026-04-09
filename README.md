@@ -19,18 +19,7 @@ When an engineer submits an incident report, the agent automatically:
 
 ## Architecture
 
-```
-Reporter (web UI)
-      │
-      ▼
-FastAPI (:8000)
-      │
-      ├── Stage 1: INGEST    — sanitize text, log, image (guardrails)
-      ├── Stage 2: TRIAGE    — RAG (FAISS/Medusa) + LLM triage + summary + runbook
-      ├── Stage 3: TICKET    — create ticket (mock Linear, JSON persistence)
-      ├── Stage 4: NOTIFY    — email + Slack to team
-      └── Stage 5: RESOLVE   — LLM resolution notes + notify reporter
-```
+![Pipeline architecture](./pipeline.svg)
 
 Full architecture and orchestration details: [`AGENTS_USE.md`](./AGENTS_USE.md)  
 Scaling analysis: [`SCALING.md`](./SCALING.md)
