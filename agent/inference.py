@@ -4,6 +4,7 @@ inference.py — LLM singleton con soporte multimodal (Qwen3.5 + mmproj)
 
 import base64
 import glob
+import json
 import logging
 import os
 import re
@@ -22,7 +23,7 @@ N_GPU_LAYERS = int(os.getenv("LLM_GPU_LAYERS", "35"))
 MAX_TOKENS = 1024
 
 # ---------------------------------------------------------------------------
-# Prompt templates (en inglés, como pide el hackathon)
+# Prompt templates
 # ---------------------------------------------------------------------------
 TRIAGE_PROMPT = """\
 You are an expert SRE performing automated incident triage.
@@ -81,20 +82,37 @@ Original description: {description}
 
 Resolution note:"""
 
+RUNBOOK_PROMPT = """\
+You are an SRE writing an emergency runbook for an on-call engineer.
+Based on the incident triage below, generate exactly 3 to 5 numbered action steps.
+Each step must be concrete and immediately actionable.
+Good examples: "Check pod logs with: kubectl logs -n prod deploy/checkout-service --tail=100"
+Bad examples: "Investigate the issue" (too vague)
+Focus on: investigation first, then mitigation, then verification.
+Respond ONLY with a valid JSON array of strings, no extra text, no markdown.
+Example format: ["Step 1: ...", "Step 2: ...", "Step 3: ..."]
+
+Severity: {severity}
+Component: {component}
+Hypothesis: {hypothesis}
+Keywords: {keywords}
+
+JSON array:"""
+
+
 # ---------------------------------------------------------------------------
-# Backend local con Qwen35ChatHandler
+# Backend: local Qwen3.5
 # ---------------------------------------------------------------------------
 class _LocalBackend:
     def __init__(self, model_path: str, mmproj_path: Optional[str] = None):
         from llama_cpp import Llama
         from llama_cpp.llama_chat_format import Qwen35ChatHandler
 
-        # Crear el handler multimodal pasándole la ruta del proyector.
-        # Qwen35ChatHandler hereda de MTMDChatHandler, que acepta clip_model_path.
-        chat_handler = Qwen35ChatHandler(clip_model_path=mmproj_path, enable_thinking=False,
-            # Permite razonamiento (bloques <think>)
-            add_vision_id=True,  # Útil para multi-imagen
-            verbose=False  # Silenciar logs internos si no se desean
+        chat_handler = Qwen35ChatHandler(
+            clip_model_path=mmproj_path,
+            enable_thinking=False,
+            add_vision_id=True,
+            verbose=False,
         )
 
         logger.info(f"Loading model: {model_path}")
@@ -103,32 +121,39 @@ class _LocalBackend:
         else:
             logger.warning("No mmproj file provided. Model will work in text-only mode.")
 
-        # Llama NO recibe clip_model_path en esta versión del fork.
-        self._llm = Llama(model_path=model_path, chat_handler=chat_handler, n_ctx=N_CTX, n_gpu_layers=N_GPU_LAYERS,
-            verbose=False, )
+        self._llm = Llama(
+            model_path=model_path,
+            chat_handler=chat_handler,
+            n_ctx=N_CTX,
+            n_gpu_layers=N_GPU_LAYERS,
+            verbose=False,
+        )
 
     def generate(self, prompt: str, image_bytes: Optional[bytes] = None, image_media_type: Optional[str] = None) -> str:
-        logger.info(
-            f"🖼️ Backend generate: image_bytes={'present' if image_bytes else 'None'} ({len(image_bytes) if image_bytes else 0} bytes)")
+        logger.info(f"🖼️ Backend generate: image_bytes={'present' if image_bytes else 'None'} ({len(image_bytes) if image_bytes else 0} bytes)")
         messages = []
         content = []
         if image_bytes:
-            logger.info(f"🖼️ Encoding image of type {image_media_type} to base64...")
             mime = image_media_type if image_media_type else "image/png"
             img_b64 = base64.b64encode(image_bytes).decode("utf-8")
             data_url = f"data:{mime};base64,{img_b64}"
             content.append({"type": "image_url", "image_url": {"url": data_url}})
-            logger.info(f"🖼️ Image encoded, base64 length: {len(img_b64)}")
         content.append({"type": "text", "text": prompt})
         messages.append({"role": "user", "content": content})
 
-        logger.info(
-            f"inference.ctx_check: n_ctx={N_CTX}, image={'yes' if image_bytes else 'no'}, prompt_chars={len(prompt)}")
-        response = self._llm.create_chat_completion(messages=messages, max_tokens=MAX_TOKENS, temperature=1.0,
-            stop=["</s>", "<|im_end|>"], )
+        logger.info(f"inference.ctx_check: n_ctx={N_CTX}, image={'yes' if image_bytes else 'no'}, prompt_chars={len(prompt)}")
+        response = self._llm.create_chat_completion(
+            messages=messages,
+            max_tokens=MAX_TOKENS,
+            temperature=1.0,
+            stop=["</s>", "<|im_end|>"],
+        )
         return response["choices"][0]["message"]["content"].strip()
 
 
+# ---------------------------------------------------------------------------
+# Backend: OpenRouter
+# ---------------------------------------------------------------------------
 class _OpenRouterBackend:
     def __init__(self):
         import httpx
@@ -137,27 +162,45 @@ class _OpenRouterBackend:
         self._model = OPENROUTER_MODEL
         logger.info(f"inference.openrouter: model={self._model}")
 
-    def generate(self, prompt: str, image_bytes: Optional[bytes] = None,
-            image_media_type: Optional[str] = None, ) -> str:
-        resp = self._client.post("https://openrouter.ai/api/v1/chat/completions",
-            headers={"Authorization": f"Bearer {self._key}", "Content-Type": "application/json",
-                "HTTP-Referer": "https://sre-agent", "X-Title": "SRE Agent", },
-            json={"model": self._model, "messages": [{"role": "user", "content": prompt}], "max_tokens": MAX_TOKENS,
-                "temperature": 0.2, }, )
+    def generate(self, prompt: str, image_bytes: Optional[bytes] = None, image_media_type: Optional[str] = None) -> str:
+        resp = self._client.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self._key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://sre-agent",
+                "X-Title": "SRE Agent",
+            },
+            json={
+                "model": self._model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": MAX_TOKENS,
+                "temperature": 0.2,
+            },
+        )
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"].strip()
 
 
+# ---------------------------------------------------------------------------
+# Backend: Mock fallback
+# ---------------------------------------------------------------------------
 class _MockBackend:
-    """Fallback mock – acepta image_bytes aunque no los use."""
-
-    def generate(self, prompt: str, image_bytes: Optional[bytes] = None,
-            image_media_type: Optional[str] = None, ) -> str:
+    def generate(self, prompt: str, image_bytes: Optional[bytes] = None, image_media_type: Optional[str] = None) -> str:
+        if "JSON array" in prompt or "runbook" in prompt.lower():
+            return ('["Step 1: Check service logs for recent errors", '
+                    '"Step 2: Verify database connection pool metrics", '
+                    '"Step 3: Restart the affected service if connections are exhausted", '
+                    '"Step 4: Monitor error rate for 5 minutes after restart"]')
         if "JSON" in prompt or "triage" in prompt.lower():
             return ('{"severity":"P2","component":"checkout-service",'
                     '"hypothesis":"Database connection pool exhausted under load",'
                     '"keywords":["checkout","database","timeout","connection"],'
                     '"needs_escalation":true}')
+        if "resolution" in prompt.lower():
+            return ("The database connection pool exhaustion has been resolved by increasing the pool size. "
+                    "The root cause was a surge in concurrent checkout requests. "
+                    "Monitor connection metrics over the next 24 hours to confirm stability.")
         return ("The checkout service is experiencing intermittent failures due to "
                 "database connection pool exhaustion. Immediate action: increase pool size.")
 
@@ -173,10 +216,9 @@ def _init_backend():
     if _backend is not None:
         return
 
-    # Buscar los archivos específicos de Qwen3.5-0.8B
     model_path = os.path.join(MODELS_DIR, "Qwen.Qwen3.5-0.8B.Q4_K_M.gguf")
     mmproj_path = os.path.join(MODELS_DIR, "mmproj-Qwen.Qwen3.5-0.8B.f16.gguf")
-    # Si no existen los archivos exactos, buscar cualquier .gguf (fallback)
+
     if not os.path.exists(model_path):
         gguf_files = glob.glob(os.path.join(MODELS_DIR, "*.gguf"))
         for f in gguf_files:
@@ -192,7 +234,6 @@ def _init_backend():
         else:
             mmproj_path = None
 
-    # 1. Intentar modelo local
     if model_path and os.path.exists(model_path):
         try:
             _backend = _LocalBackend(model_path, mmproj_path)
@@ -201,7 +242,6 @@ def _init_backend():
         except Exception as e:
             logger.warning(f"inference.local_failed: {e}")
 
-    # 2. Intentar OpenRouter
     if OPENROUTER_KEY:
         try:
             _backend = _OpenRouterBackend()
@@ -210,17 +250,18 @@ def _init_backend():
         except Exception as e:
             logger.warning(f"inference.openrouter_failed: {e}")
 
-    # 3. Mock final
     logger.warning("inference.backend: choice=mock")
     _backend = _MockBackend()
 
 
-def run_triage(context: str, image_bytes: Optional[bytes] = None, image_media_type: Optional[str] = None, ) -> str:
+# ---------------------------------------------------------------------------
+# Public functions
+# ---------------------------------------------------------------------------
+
+def run_triage(context: str, image_bytes: Optional[bytes] = None, image_media_type: Optional[str] = None) -> str:
     _init_backend()
     prompt = TRIAGE_PROMPT.format(context=context)
     result = _backend.generate(prompt, image_bytes=image_bytes, image_media_type=image_media_type)
-
-    # Limpieza y extracción de JSON
     result = re.sub(r"<think>.*?</think>", "", result, flags=re.DOTALL)
     result = re.sub(r"<\|im_end\|>", "", result)
     result = result.replace("\n", " ").replace("\r", " ").replace("\t", " ")
@@ -232,19 +273,17 @@ def run_triage(context: str, image_bytes: Optional[bytes] = None, image_media_ty
     return result
 
 
-def run_summary(context: str, triage_json: str, image_bytes: Optional[bytes] = None,
-        image_media_type: Optional[str] = None, ) -> str:
+def run_summary(context: str, triage_json: str, image_bytes: Optional[bytes] = None, image_media_type: Optional[str] = None) -> str:
     _init_backend()
     prompt = SUMMARY_PROMPT.format(context=context, triage_json=triage_json)
     result = _backend.generate(prompt, image_bytes=image_bytes, image_media_type=image_media_type)
-
     result = re.sub(r"<think>.*?</think>", "", result, flags=re.DOTALL)
     result = re.sub(r"<\|im_end\|>", "", result)
     logger.info(f"inference.summary_done: chars_out={len(result)}")
     return result
 
+
 def run_resolution_notes(ticket: dict) -> str:
-    """Generate a human-friendly resolution note for the reporter via LLM."""
     _init_backend()
     triage = ticket.get("triage_meta", {})
     prompt = RESOLUTION_PROMPT.format(
@@ -258,3 +297,43 @@ def run_resolution_notes(ticket: dict) -> str:
     result = re.sub(r"<\|im_end\|>", "", result).strip()
     logger.info(f"inference.resolution_done: chars_out={len(result)}")
     return result
+
+
+def run_runbook(triage: dict) -> list:
+    """Generate 3-5 concrete runbook steps for the on-call engineer."""
+    _init_backend()
+    prompt = RUNBOOK_PROMPT.format(
+        severity=triage.get("severity", "P3"),
+        component=triage.get("component", "unknown"),
+        hypothesis=triage.get("hypothesis", ""),
+        keywords=", ".join(triage.get("keywords", [])),
+    )
+    result = _backend.generate(prompt)
+    result = re.sub(r"<think>.*?</think>", "", result, flags=re.DOTALL)
+    result = re.sub(r"<\|im_end\|>", "", result).strip()
+
+    # Try to parse JSON array
+    match = re.search(r"\[.*\]", result, re.DOTALL)
+    if match:
+        try:
+            steps = json.loads(match.group(0))
+            if isinstance(steps, list) and steps:
+                logger.info(f"inference.runbook_done: steps={len(steps)}")
+                return [str(s) for s in steps[:5]]
+        except json.JSONDecodeError:
+            pass
+
+    # Fallback: extract numbered lines
+    lines = [l.strip() for l in result.split("\n") if re.match(r"^\d+[\.\):]", l.strip())]
+    if lines:
+        logger.info(f"inference.runbook_done (fallback lines): steps={len(lines)}")
+        return lines[:5]
+
+    logger.warning("inference.runbook_done: using default steps")
+    return [
+        f"Step 1: Check {triage.get('component', 'service')} logs for recent errors",
+        "Step 2: Verify health metrics and error rates in your observability dashboard",
+        "Step 3: Inspect recent deployments or config changes that may correlate with the incident",
+        "Step 4: Apply mitigation (rollback / restart / scale) based on findings",
+        "Step 5: Confirm recovery and update ticket with root cause",
+    ]

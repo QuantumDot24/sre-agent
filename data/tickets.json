@@ -93,5 +93,37 @@
     "updated_at": "2026-04-08T23:23:10Z",
     "resolved_at": "2026-04-08T23:23:10Z",
     "resolution_notes": "We have successfully resolved the SQL injection vulnerability in query-index.spec.ts to prevent unauthorized data extraction, and we recommend tracking this P1 incident with immediate investigation to further protect the system."
+  },
+  "INC-E8CAE495": {
+    "id": "INC-E8CAE495",
+    "title": "fail on validation",
+    "description": "The checkout module is rejecting orders based on a strict 'must start with 4' validation, indicating that the incoming card data (e.g., 5555-1234-5678-9012) does not meet the gateway's minimum format requirements for valid Visa payments. This typically occurs when incoming card numbers are truncated, missing the first 4 digits required by the payment gateway to initiate a transaction, or contain invalid digits that the gateway flags as non-Visa. The affected system appears to be the payment integration module which relies on this specific number formatting rule. The most probable cause is an incomplete card number being sent to the gateway that fails to trigger the 'must start with 4' check.",
+    "state": "backlog",
+    "severity": "P3",
+    "priority": 3,
+    "component": "checkout",
+    "reporter_email": "flyingneuron@yandex.com",
+    "triage_meta": {
+      "severity": "P3",
+      "component": "checkout",
+      "hypothesis": "The checkout module is rejecting orders based on a strict 'must start with 4' validation, which is commonly enforced by payment gateways (e.g., Visa) but often fails on international or legacy card numbers, suggesting a mismatch between the expected format and the actual incoming data.",
+      "keywords": [
+        "card_number",
+        "validation",
+        "payment"
+      ],
+      "needs_escalation": true
+    },
+    "runbook_steps": [
+      "Step 1: Check checkout logs for recent errors",
+      "Step 2: Verify health metrics and error rates in your observability dashboard",
+      "Step 3: Inspect recent deployments or config changes that may correlate with the incident",
+      "Step 4: Apply mitigation (rollback / restart / scale) based on findings",
+      "Step 5: Confirm recovery and update ticket with root cause"
+    ],
+    "created_at": "2026-04-09T03:19:30Z",
+    "updated_at": "2026-04-09T03:19:30Z",
+    "resolved_at": null,
+    "resolution_notes": null
   }
 }

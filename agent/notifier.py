@@ -1,11 +1,8 @@
 """
 notifier.py — Mocked email and Slack notifications.
 
-In production: swap _send_email for smtplib/SendGrid and
-_send_slack for a real Slack Incoming Webhook call.
-
-All sent notifications are appended to ./data/notifications.jsonl
-for demo/observability purposes.
+Real email: set SMTP_HOST in .env
+Real Slack: set SLACK_WEBHOOK_URL in .env (Incoming Webhook URL)
 """
 
 import json
@@ -17,19 +14,14 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-NOTIFICATIONS_LOG = os.getenv("NOTIFICATIONS_LOG", "./data/notifications.jsonl")
-SLACK_WEBHOOK_URL  = os.getenv("SLACK_WEBHOOK_URL", "")   # empty = mock
-SMTP_HOST          = os.getenv("SMTP_HOST", "")           # empty = mock
+NOTIFICATIONS_LOG    = os.getenv("NOTIFICATIONS_LOG", "./data/notifications.jsonl")
+SLACK_WEBHOOK_URL    = os.getenv("SLACK_WEBHOOK_URL", "")
+SMTP_HOST            = os.getenv("SMTP_HOST", "")
 
-TEAM_EMAIL = os.getenv("TEAM_EMAIL", "sre-team@example.com")
-TEAM_SLACK = os.getenv("TEAM_SLACK_CHANNEL", "#incidents")
+TEAM_EMAIL        = os.getenv("TEAM_EMAIL", "sre-team@example.com")
+TEAM_SLACK        = os.getenv("TEAM_SLACK_CHANNEL", "#incidents")
 
-_SEVERITY_EMOJI = {
-    "P1": "🔴",
-    "P2": "🟠",
-    "P3": "🟡",
-    "P4": "🟢",
-}
+_SEVERITY_EMOJI = {"P1": "🔴", "P2": "🟠", "P3": "🟡", "P4": "🟢"}
 
 
 # ---------------------------------------------------------------------------
@@ -37,19 +29,17 @@ _SEVERITY_EMOJI = {
 # ---------------------------------------------------------------------------
 
 def _persist(record: dict) -> None:
-    """Append notification record to JSONL log for observability."""
     Path(NOTIFICATIONS_LOG).parent.mkdir(parents=True, exist_ok=True)
     with open(NOTIFICATIONS_LOG, "a") as f:
         f.write(json.dumps(record) + "\n")
 
 
 def _send_email(to: str, subject: str, body: str) -> None:
-    """Send email — real if SMTP_HOST is set, mocked otherwise."""
     record = {
-        "ts": time.time(),
-        "type": "email",
-        "to": to,
-        "subject": subject,
+        "ts":           time.time(),
+        "type":         "email",
+        "to":           to,
+        "subject":      subject,
         "body_preview": body[:200],
     }
 
@@ -73,11 +63,10 @@ def _send_email(to: str, subject: str, body: str) -> None:
 
 
 def _send_slack(channel: str, text: str, blocks: Optional[list] = None) -> None:
-    """Post to Slack — real if SLACK_WEBHOOK_URL is set, mocked otherwise."""
     record = {
-        "ts": time.time(),
-        "type": "slack",
-        "channel": channel,
+        "ts":           time.time(),
+        "type":         "slack",
+        "channel":      channel,
         "text_preview": text[:200],
     }
 
@@ -86,9 +75,14 @@ def _send_slack(channel: str, text: str, blocks: Optional[list] = None) -> None:
         payload = {"text": text}
         if blocks:
             payload["blocks"] = blocks
-        httpx.post(SLACK_WEBHOOK_URL, json=payload, timeout=10)
-        record["status"] = "sent"
-        logger.info(f"notifier.slack_sent: channel={channel}")
+        try:
+            resp = httpx.post(SLACK_WEBHOOK_URL, json=payload, timeout=10)
+            resp.raise_for_status()
+            record["status"] = "sent"
+            logger.info(f"notifier.slack_sent: channel={channel}")
+        except Exception as e:
+            record["status"] = f"error: {e}"
+            logger.error(f"notifier.slack_error: {e}")
     else:
         record["status"] = "mocked"
         logger.info(f"notifier.slack_mock: channel={channel}, text={text[:80]}")
@@ -104,6 +98,17 @@ def notify_team_email(ticket: dict, triage: dict) -> None:
     severity = triage.get("severity", "P3")
     emoji    = _SEVERITY_EMOJI.get(severity, "⚪")
     subject  = f"{emoji} [{severity}] Incident: {ticket['title']} [{ticket['id']}]"
+
+    runbook_steps = ticket.get("runbook_steps", [])
+    runbook_section = ""
+    if runbook_steps:
+        steps_text = "\n".join(f"  {i+1}. {step}" for i, step in enumerate(runbook_steps))
+        runbook_section = f"""
+RUNBOOK — IMMEDIATE ACTIONS
+----------------------------
+{steps_text}
+"""
+
     body = f"""
 SRE INCIDENT ALERT
 ==================
@@ -123,7 +128,7 @@ SUMMARY
 
 KEYWORDS: {', '.join(triage.get('keywords', []))}
 ESCALATION NEEDED: {triage.get('needs_escalation', False)}
-
+{runbook_section}
 View ticket: http://localhost:8000/tickets/{ticket['id']}
 """.strip()
 
@@ -133,8 +138,9 @@ View ticket: http://localhost:8000/tickets/{ticket['id']}
 def notify_team_slack(ticket: dict, triage: dict) -> None:
     severity = triage.get("severity", "P3")
     emoji    = _SEVERITY_EMOJI.get(severity, "⚪")
+    text     = f"{emoji} *[{severity}] New Incident: {ticket['title']}*"
 
-    text = f"{emoji} *[{severity}] New Incident: {ticket['title']}*"
+    runbook_steps = ticket.get("runbook_steps", [])
 
     blocks = [
         {
@@ -152,25 +158,32 @@ def notify_team_slack(ticket: dict, triage: dict) -> None:
         },
         {
             "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"*Hypothesis:*\n{triage.get('hypothesis','N/A')}",
-            },
+            "text": {"type": "mrkdwn", "text": f"*Hypothesis:*\n{triage.get('hypothesis','N/A')}"},
         },
         {
             "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"*Summary:*\n{ticket['description'][:300]}...",
-            },
+            "text": {"type": "mrkdwn", "text": f"*Summary:*\n{ticket['description'][:300]}..."},
         },
     ]
+
+    # Runbook block — only if steps exist
+    if runbook_steps:
+        steps_md = "\n".join(f"{i+1}. {step}" for i, step in enumerate(runbook_steps))
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*🗒 Runbook — Immediate Actions:*\n{steps_md}"},
+        })
+
+    blocks.append({"type": "divider"})
+    blocks.append({
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": f"<http://localhost:8000/tickets/{ticket['id']}|View ticket {ticket['id']}>"}],
+    })
 
     _send_slack(TEAM_SLACK, text, blocks)
 
 
 def notify_reporter_resolved(ticket: dict) -> None:
-    """Notify the original reporter that their incident has been resolved."""
     subject = f"✅ Resolved: {ticket['title']} [{ticket['id']}]"
     body = f"""
 Hello,
@@ -191,8 +204,6 @@ please submit a new report at http://localhost:8000.
 """.strip()
 
     _send_email(ticket["reporter_email"], subject, body)
-
-    # Also post a resolution notice to Slack
     _send_slack(
         TEAM_SLACK,
         f"✅ Incident `{ticket['id']}` — *{ticket['title']}* has been resolved.",

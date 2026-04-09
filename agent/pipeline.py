@@ -1,9 +1,8 @@
 """
 pipeline.py — Orchestrates the 5 SRE pipeline stages.
-Cada stage tiene su propia observación en Langfuse para trazabilidad completa.
 
 Stage 1: INGEST   — validate & sanitize inputs
-Stage 2: TRIAGE   — LLM triage + RAG context
+Stage 2: TRIAGE   — LLM triage + RAG context + runbook generation
 Stage 3: TICKET   — create ticket in mock Linear
 Stage 4: NOTIFY   — notify technical team (email + Slack)
 Stage 5: RESOLVE  — listen for resolution, notify reporter
@@ -34,7 +33,6 @@ logger = logging.getLogger(__name__)
 
 @contextmanager
 def _span(name: str, **kwargs):
-    """Crea un span de Langfuse si está disponible, si no es no-op."""
     lf = get_langfuse()
     if lf:
         with lf.start_as_current_observation(name=name, as_type="span", **kwargs) as s:
@@ -45,7 +43,6 @@ def _span(name: str, **kwargs):
 
 @contextmanager
 def _generation(name: str, **kwargs):
-    """Crea una generación de Langfuse si está disponible, si no es no-op."""
     lf = get_langfuse()
     if lf:
         with lf.start_as_current_observation(name=name, as_type="generation", **kwargs) as s:
@@ -55,7 +52,6 @@ def _generation(name: str, **kwargs):
 
 
 def _upd(span, **kwargs):
-    """Actualiza un span solo si no es None."""
     if span:
         try:
             span.update(**kwargs)
@@ -64,7 +60,7 @@ def _upd(span, **kwargs):
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Main pipeline
 # ---------------------------------------------------------------------------
 
 def run_pipeline(
@@ -107,7 +103,6 @@ def run_pipeline(
 
                 if log_bytes:
                     clean_log = sanitize_log(log_bytes).decode("utf-8", errors="replace")
-
                 if image_bytes and image_media_type:
                     sanitize_image(image_bytes, image_media_type)
 
@@ -136,8 +131,9 @@ def run_pipeline(
                 raise
 
         # ── Stage 2: TRIAGE ──────────────────────────────────────────────────
-        triage  = {}
-        summary = ""
+        triage   = {}
+        summary  = ""
+        runbook  = []
 
         with _span("stage.triage") as s2:
             t0 = time.perf_counter()
@@ -161,6 +157,7 @@ def run_pipeline(
                         + "\n=== END CODEBASE CONTEXT ==="
                     )
 
+                # LLM call 1: triage
                 with _generation("llm.triage", model=inference.OPENROUTER_MODEL,
                                  input={"chars": len(incident_context), "has_image": image_bytes is not None}) as s_lt:
                     raw_triage = inference.run_triage(
@@ -197,6 +194,7 @@ def run_pipeline(
                         "needs_escalation": esc.group(1) == "true"  if esc else False,
                     }
 
+                # LLM call 2: summary
                 with _generation("llm.summary", model=inference.OPENROUTER_MODEL,
                                  input={"triage": triage}) as s_ls:
                     summary = inference.run_summary(
@@ -206,16 +204,31 @@ def run_pipeline(
                     )
                     _upd(s_ls, output={"chars": len(summary)})
 
+                # LLM call 3: runbook
+                with _generation("llm.runbook", model=inference.OPENROUTER_MODEL,
+                                 input={"severity": triage.get("severity"), "component": triage.get("component")}) as s_rb:
+                    try:
+                        runbook = inference.run_runbook(triage)
+                        _upd(s_rb, output={"steps": len(runbook)})
+                        log_stage("RUNBOOK", "generated", run_id, steps=len(runbook))
+                        metrics.inc("stage.runbook.ok")
+                    except Exception as rb_err:
+                        logger.warning(f"pipeline.runbook_failed: {rb_err}")
+                        runbook = []
+                        metrics.inc("stage.runbook.error")
+
                 elapsed = time.perf_counter() - t0
                 _upd(s2, output={
                     "severity":         triage.get("severity"),
                     "component":        triage.get("component"),
                     "hypothesis":       triage.get("hypothesis"),
                     "needs_escalation": triage.get("needs_escalation"),
+                    "runbook_steps":    len(runbook),
                     "elapsed_ms":       round(elapsed * 1000),
                 })
                 result["triage"]  = triage
                 result["summary"] = summary
+                result["runbook"] = runbook
                 log_stage("TRIAGE", "success", run_id, severity=triage.get("severity"), elapsed=elapsed)
                 metrics.inc("stage.triage.ok")
                 metrics.inc(f"severity.{triage.get('severity', 'unknown')}")
@@ -227,23 +240,27 @@ def run_pipeline(
                 triage  = {"severity": "P3", "component": "unknown",
                            "hypothesis": "LLM triage failed", "needs_escalation": False}
                 summary = f"Automated triage failed. Manual review required.\n\nOriginal report:\n{clean_description[:500]}"
+                runbook = []
 
         # ── Stage 3: TICKET ──────────────────────────────────────────────────
         with _span("stage.ticket") as s3:
             t0 = time.perf_counter()
             try:
                 ticket = create_ticket(
-                    title=clean_title, description=summary,
+                    title=clean_title,
+                    description=summary,
                     severity=triage.get("severity", "P3"),
                     component=triage.get("component", "unknown"),
                     reporter_email=reporter_email,
                     triage_meta=triage,
+                    runbook_steps=runbook,
                 )
                 elapsed = time.perf_counter() - t0
                 _upd(s3, output={
-                    "ticket_id":  ticket["id"],
-                    "severity":   ticket.get("severity"),
-                    "elapsed_ms": round(elapsed * 1000),
+                    "ticket_id":     ticket["id"],
+                    "severity":      ticket.get("severity"),
+                    "runbook_steps": len(runbook),
+                    "elapsed_ms":    round(elapsed * 1000),
                 })
                 result["ticket"] = ticket
                 _upd(root, metadata={"ticket_id": ticket["id"]})
@@ -270,7 +287,7 @@ def run_pipeline(
             except Exception as e:
                 _upd(s4, output={"error": str(e)}, level="ERROR")
                 log_stage("NOTIFY_TEAM", "error", run_id, error=str(e))
-                metrics.inc("stage.notify_team.error")  # Non-fatal
+                metrics.inc("stage.notify_team.error")
 
         _upd(root, output={
             "ticket_id": ticket["id"],
@@ -280,7 +297,6 @@ def run_pipeline(
         logger.info(f"pipeline.complete: run_id={run_id}, ticket_id={ticket['id']}")
 
     if lf: lf.flush()
-
     result["trace_id"] = ticket["id"]
     return result
 
@@ -306,8 +322,9 @@ def resolve_pipeline(ticket_id: str) -> dict:
         with _span("stage.resolve") as s_res:
             t0 = time.perf_counter()
             try:
-                # ── Generate LLM resolution notes before closing the ticket ──
                 raw_ticket = get_ticket(ticket_id)
+
+                # Generate LLM resolution notes before closing
                 try:
                     notes = inference.run_resolution_notes(raw_ticket)
                     logger.info(f"pipeline.resolution_notes_generated: chars={len(notes)}")
@@ -315,12 +332,12 @@ def resolve_pipeline(ticket_id: str) -> dict:
                     logger.warning(f"pipeline.resolution_notes_failed: {note_err}")
                     notes = "The issue has been addressed by the engineering team."
 
-                ticket = resolve_ticket(ticket_id, notes=notes)
+                ticket  = resolve_ticket(ticket_id, notes=notes)
                 elapsed = time.perf_counter() - t0
                 _upd(s_res, output={
-                    "ticket_id": ticket_id,
+                    "ticket_id":   ticket_id,
                     "notes_chars": len(notes),
-                    "elapsed_ms": round(elapsed * 1000),
+                    "elapsed_ms":  round(elapsed * 1000),
                 })
                 log_stage("RESOLVE", "ticket_updated", run_id, ticket_id=ticket_id, elapsed=elapsed)
                 metrics.inc("stage.resolve.ok")

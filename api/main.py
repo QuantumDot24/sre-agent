@@ -909,6 +909,13 @@ function renderTickets(data) {
         </div>
         <div class="ticket-detail">
           <div class="ticket-description">${desc || 'No description.'}</div>
+          ${t.runbook_steps && t.runbook_steps.length ? `
+          <div style="background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.2);border-radius:8px;padding:10px 14px;margin-bottom:10px;">
+            <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;color:var(--v300);">🗒 Runbook — Immediate Actions</div>
+            <ol style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;">
+              ${t.runbook_steps.map(s => '<li style="font-size:.81rem;color:var(--text-2);line-height:1.5">' + s + '</li>').join('')}
+            </ol>
+          </div>` : ''}
           ${t.state === 'done' && t.resolution_notes ? `
           <div style="background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.2);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:.82rem;color:var(--p4)">
             <div style="font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;opacity:.7">Resolution</div>

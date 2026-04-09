@@ -1,130 +1,122 @@
 # SRE Incident Intake & Triage Agent
 
-> Automated SRE incident triage powered by **Qwen LLM + RAG** over the [Medusa](https://github.com/medusajs/medusa) e-commerce codebase.
+Automated incident triage for e-commerce platforms powered by a multimodal LLM, RAG over the Medusa codebase, and end-to-end observability.
+
+Built for **AgentX Hackathon 2026**.
 
 ---
 
-## Architecture Overview
+## What it does
 
-```
-Reporter (Browser)
-       │
-       ▼
-  FastAPI /report  ─── multimodal input (text + log file + screenshot)
-       │
-  ┌────┴─────────────────────────────────────────┐
-  │              PIPELINE (5 Stages)              │
-  │                                               │
-  │  1. INGEST   → guardrails.py                  │
-  │               sanitize + injection detection  │
-  │                                               │
-  │  2. TRIAGE   → indexer.py (ChromaDB/MiniLM)  │
-  │               + inference.py (Qwen / OR)      │
-  │               → structured JSON + summary     │
-  │                                               │
-  │  3. TICKET   → mock_linear.py                 │
-  │               in-memory + JSON persistence    │
-  │                                               │
-  │  4. NOTIFY   → notifier.py                    │
-  │               email mock + Slack mock         │
-  │                                               │
-  │  5. RESOLVE  → resolve endpoint               │
-  │               → notify reporter               │
-  └───────────────────────────────────────────────┘
-       │
-  Observability: structlog JSON + /metrics endpoint
-```
+When an engineer submits an incident report, the agent automatically:
 
-### Key Components
-
-| Component | Tech | Notes |
-|-----------|------|-------|
-| LLM (primary) | Qwen GGUF via llama-cpp-python | Drop `.gguf` in `./models/` |
-| LLM (fallback) | OpenRouter API | Set `OPENROUTER_API_KEY` |
-| LLM (demo) | Built-in mock | Works with no keys/models |
-| RAG / Embeddings | ChromaDB + MiniLM | Auto-indexes Medusa repo |
-| Ticketing | Mock Linear | In-memory + JSON file |
-| Notifications | Mock email + Slack | JSONL audit log |
-| Observability | structlog + counters | `/metrics` endpoint |
+1. **Triages** the incident using a multimodal LLM (Qwen2.5-7B) — assigns severity P1–P4, identifies the affected component, generates a root-cause hypothesis, and produces a 3–5 step actionable runbook
+2. **Creates a ticket** in a Linear-style ticket store with full triage metadata
+3. **Notifies the team** via email and Slack with the hypothesis, technical summary, and runbook — everything the on-call engineer needs at 2am without opening another tool
+4. **Notifies the reporter** when the ticket is resolved, with an LLM-generated resolution note
 
 ---
 
-## Quick Start
+## Architecture
+
+```
+Reporter (web UI)
+      │
+      ▼
+FastAPI (:8000)
+      │
+      ├── Stage 1: INGEST    — sanitize text, log, image (guardrails)
+      ├── Stage 2: TRIAGE    — RAG (FAISS/Medusa) + LLM triage + summary + runbook
+      ├── Stage 3: TICKET    — create ticket (mock Linear, JSON persistence)
+      ├── Stage 4: NOTIFY    — email + Slack to team
+      └── Stage 5: RESOLVE   — LLM resolution notes + notify reporter
+```
+
+Full architecture and orchestration details: [`AGENTS_USE.md`](./AGENTS_USE.md)  
+Scaling analysis: [`SCALING.md`](./SCALING.md)
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+|-------|-----------|
+| API | FastAPI + Uvicorn |
+| LLM (local) | Qwen2.5-7B-Instruct via llama-cpp-python |
+| LLM (cloud) | OpenRouter (qwen/qwen-2.5-7b-instruct) |
+| Multimodal | Qwen3.5ChatHandler + mmproj |
+| RAG | FAISS + sentence-transformers, indexed over Medusa |
+| Tracing | Langfuse |
+| Notifications | smtplib (email) + Slack Incoming Webhooks |
+| Ticket store | In-memory + JSON file persistence (mock Linear) |
+| Container | Docker Compose |
+
+---
+
+## Quick start
+
+See [`QUICKGUIDE.md`](./QUICKGUIDE.md) for the full step-by-step.
 
 ```bash
-git clone <this-repo>
+git clone <repo-url>
 cd sre-agent
 cp .env.example .env
-# (optional) add OPENROUTER_API_KEY or drop a .gguf in ./models/
+# Fill in OPENROUTER_API_KEY and SLACK_WEBHOOK_URL in .env
 docker compose up --build
 ```
 
-Open http://localhost:8000
+Open [http://localhost:8000](http://localhost:8000)
 
 ---
 
-## Setup Instructions
-
-### Option A — No model, demo mode (fastest)
-
-```bash
-cp .env.example .env
-docker compose up --build
-```
-
-The mock backend returns realistic P2 triage responses — sufficient for demo.
-
-### Option B — OpenRouter (real LLM, no GPU needed)
-
-```bash
-cp .env.example .env
-# Set OPENROUTER_API_KEY in .env
-docker compose up --build
-```
-
-### Option C — Local Qwen GGUF
-
-```bash
-# Download e.g. Qwen2.5-7B-Instruct-Q4_K_M.gguf from HuggingFace
-cp qwen*.gguf ./models/
-cp .env.example .env
-# Set LLM_GPU_LAYERS=-1 for full GPU offload
-docker compose up --build
-```
-
----
-
-## API Reference
+## Key endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/` | HTML demo UI |
-| `POST` | `/report` | Submit incident (form-data) |
-| `POST` | `/resolve/{id}` | Mark ticket resolved |
-| `GET` | `/tickets` | List all tickets |
-| `GET` | `/tickets/{id}` | Get ticket detail |
+| `GET` | `/` | Web UI |
+| `POST` | `/report` | Submit incident (multimodal) |
+| `POST` | `/resolve/{id}` | Resolve ticket + notify reporter |
+| `GET` | `/tickets` | List tickets (filter, search, paginate) |
+| `GET` | `/tickets/{id}` | Get single ticket |
 | `GET` | `/metrics` | Observability counters |
-| `GET` | `/notifications` | Notification audit log |
-| `GET` | `/docs` | OpenAPI docs |
+| `GET` | `/notifications` | Notification log |
+| `GET` | `/docs` | Interactive API docs (Swagger) |
 
 ---
 
-## Project Structure
+## E-commerce codebase
+
+RAG is indexed over **[Medusa](https://github.com/medusajs/medusa)** — an open-source Node.js e-commerce framework. The agent uses relevant code chunks as secondary context during triage to ground hypotheses in actual implementation details.
+
+---
+
+## Project structure
 
 ```
-sre-agent/
-├── agent/
-│   ├── guardrails.py      # input sanitization + injection detection
-│   ├── inference.py       # Qwen singleton (triage + summary prompts)
-│   ├── indexer.py         # Medusa repo clone + ChromaDB + MiniLM
-│   ├── pipeline.py        # 5-stage orchestrator
-│   └── notifier.py        # email/Slack mock
 ├── api/
-│   └── main.py            # FastAPI app + HTML UI
+│   └── main.py               # FastAPI app + HTML UI
+├── agent/
+│   ├── inference.py          # LLM backends (local / OpenRouter / mock)
+│   ├── pipeline.py           # 5-stage orchestration
+│   ├── guardrails.py         # Input sanitization
+│   ├── indexer.py            # FAISS RAG index
+│   └── notifier.py           # Email + Slack
 ├── ticketing/
-│   └── mock_linear.py     # in-memory ticket store + JSON persistence
+│   └── mock_linear.py        # Ticket store
 ├── observability/
-│   └── logger.py          # structlog + metrics counters
-├── models/                # drop your .gguf here
-└── data/                  # auto-generated: chroma/, tickets.json, etc.
+│   ├── logger.py             # Structured logging + metrics
+│   └── tracing.py            # Langfuse integration
+├── data/                     # Runtime: tickets.json, notifications.jsonl
+├── models/                   # GGUF model files (not committed)
+├── docker-compose.yml
+├── .env.example
+├── AGENTS_USE.md
+├── SCALING.md
+└── QUICKGUIDE.md
 ```
+
+---
+
+## License
+
+MIT — see [`LICENSE`](./LICENSE)
